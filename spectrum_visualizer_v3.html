@@ -1,0 +1,3366 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>RX5808 Spectrum Analyzer V3 — 5.8 GHz FPV · ESP32-S3</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<script src="https://unpkg.com/esptool-js@0.4.3/bundle.js"></script>
+<style>
+  /* ─── Design System ─────────────────────────────────────── */
+  :root {
+    --bg:   #eaecf2;
+    --sf:   #ffffff;
+    --sf2:  #f4f6fb;
+    --bd1:  #ced3df;
+    --bd2:  #e3e7f0;
+    --tx1:  #0f172a;
+    --tx2:  #475569;
+    --tx3:  #94a3b8;
+    --acc:  #1a5fb4;
+    --acc2: #154fa0;
+    --r:    8px;
+    --r2:   12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--tx1);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── Header ────────────────────────────────────────────── */
+  #header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 18px;
+    background: var(--sf);
+    border-bottom: 1px solid var(--bd1);
+    height: 54px;
+    flex-shrink: 0;
+    z-index: 10;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  #title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--tx1);
+    letter-spacing: .3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #title span {
+    font-weight: 400;
+    font-size: 10px;
+    color: var(--tx3);
+    letter-spacing: 2.5px;
+    margin-left: 8px;
+  }
+  #status-area {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: var(--sf2);
+    border: 1px solid var(--bd1);
+    flex-shrink: 0;
+  }
+  #dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--bd1);
+    flex-shrink: 0;
+    transition: background .3s, box-shadow .3s;
+  }
+  #dot.connected  { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.18); }
+  #dot.connecting { background: #f59e0b; animation: blink .6s infinite; }
+  #dot.error      { background: #dc2626; }
+  @keyframes blink { 50% { opacity: .25; } }
+  #status-text {
+    font-size: 12px;
+    color: var(--tx2);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .hdr-sep { flex: 1; }
+  .hdr-label {
+    font-size: 11px;
+    color: var(--tx3);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  #sel-baud {
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid var(--bd1);
+    border-radius: var(--r);
+    background: var(--sf2);
+    color: var(--tx2);
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    outline: none;
+    flex-shrink: 0;
+  }
+  #btn-connect {
+    height: 40px;
+    padding: 0 22px;
+    border-radius: var(--r);
+    border: none;
+    background: var(--acc);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .2px;
+    transition: background .15s, opacity .1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #btn-connect:hover  { background: var(--acc2); }
+  #btn-connect:active { opacity: .85; }
+  #btn-connect.disc   { background: #dc2626; }
+  #btn-connect.disc:hover { background: #b91c1c; }
+
+  /* ─── Controls bar ──────────────────────────────────────── */
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: var(--sf);
+    border-bottom: 1px solid var(--bd2);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 100;
+  }
+  .ctrl-sep {
+    width: 1px; height: 28px;
+    background: var(--bd1);
+    margin: 0 3px;
+    flex-shrink: 0;
+  }
+
+  /* Resolution buttons */
+  .btn-step {
+    height: 40px;
+    padding: 0 18px;
+    border-radius: var(--r);
+    border: 1.5px solid var(--bd1);
+    background: var(--sf2);
+    color: var(--tx2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+    flex-shrink: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  .btn-step:hover { border-color: var(--acc); color: var(--acc); background: #eff6ff; }
+  .btn-step.active { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .btn-step-off.active { background: #dc2626; border-color: #dc2626; color: #fff; }
+
+  /* Toggle buttons (peak, scale) */
+  .btn-toggle {
+    height: 40px;
+    padding: 0 14px;
+    border-radius: var(--r);
+    border: 1.5px solid var(--bd1);
+    background: var(--sf2);
+    color: var(--tx2);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    flex-shrink: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  .btn-toggle:hover { border-color: #9ca3af; background: var(--sf); }
+  #btn-peak.on  { background: #fef3c7; border-color: #f59e0b; color: #78350f; }
+  #btn-scale.on { background: #cffafe; border-color: #22d3ee; color: #164e63; }
+
+  /* Step info */
+  #lbl-step-info {
+    font-size: 11px;
+    color: var(--tx3);
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+    padding-left: 4px;
+  }
+
+  /* ─── Dropdown system ───────────────────────────────────── */
+  .dropdown { position: relative; flex-shrink: 0; }
+  .dropdown-trigger {
+    height: 40px;
+    padding: 0 14px;
+    border-radius: var(--r);
+    border: 1.5px solid var(--bd1);
+    background: var(--sf2);
+    color: var(--tx2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: all .15s;
+    white-space: nowrap;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  .dropdown-trigger:hover { border-color: #9ca3af; background: var(--sf); }
+  .dropdown-trigger.has-on { border-color: var(--acc); color: var(--acc); background: #eff6ff; }
+  .dd-arrow {
+    font-size: 9px;
+    color: var(--tx3);
+    transition: transform .2s;
+    flex-shrink: 0;
+    margin-left: 2px;
+  }
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 300;
+    background: var(--sf);
+    border: 1px solid var(--bd1);
+    border-radius: var(--r2);
+    box-shadow: 0 8px 28px rgba(0,0,0,.13), 0 2px 8px rgba(0,0,0,.07);
+    min-width: 200px;
+    padding: 8px;
+  }
+  .dropdown-menu.open { display: block; }
+  .dd-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--tx3);
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    padding: 4px 8px 6px;
+    display: block;
+  }
+  .dd-div { height: 1px; background: var(--bd2); margin: 6px 0; }
+
+  /* Buttons inside dropdown menus */
+  .dropdown-menu button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: none;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--tx2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    gap: 8px;
+    transition: background .1s, color .1s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  .dropdown-menu button:hover { background: var(--sf2); color: var(--tx1); }
+
+  /* Focus / IM active states */
+  #btn-focus.on { background: #fefce8; color: #92400e; font-weight: 600; }
+  #btn-im3.on   { background: #fff7ed; color: #9a3412; font-weight: 600; }
+  #btn-im5.on   { background: #faf5ff; color: #6b21a8; font-weight: 600; }
+  #btn-day.on   { background: #fefce8; color: #78350f; font-weight: 600; }
+
+  /* Presets */
+  .btn-preset { color: var(--tx2); }
+  .btn-preset.active { background: #eff6ff !important; color: var(--acc); font-weight: 700; }
+
+  /* Band chips inside dropdown */
+  .band-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 4px 6px;
+  }
+  .btn-band {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: var(--r);
+    border: 2px solid;
+    background: var(--sf2);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: opacity .15s, background .1s;
+    letter-spacing: .3px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  .btn-band:not(.hidden-band) { background: #f0f7ff; }
+  .btn-band.hidden-band { opacity: 0.45; background: var(--sf2); }
+  .btn-band:hover { opacity: 1 !important; }
+
+  /* ─── Stats bar ─────────────────────────────────────────── */
+  #stats {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    padding: 5px 18px;
+    background: var(--sf2);
+    border-bottom: 1px solid var(--bd2);
+    font-size: 11px;
+    color: var(--tx3);
+    flex-shrink: 0;
+    font-family: 'Courier New', monospace;
+  }
+  .sv { color: var(--tx2); }
+  .sv.hi { color: var(--acc); font-weight: 700; }
+  .sv-info { color: var(--tx3) !important; }
+
+  /* ─── Main area ─────────────────────────────────────────── */
+  #main-area { display: flex; flex: 1; overflow: hidden; }
+
+  /* ─── Sidebar unifiée (onglets Drones / Captures) ──────── */
+  #left-sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    background: var(--sf);
+    border-right: 1px solid var(--bd1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--bd1);
+    flex-shrink: 0;
+  }
+  .stab {
+    flex: 1; padding: 8px 4px 7px;
+    font-size: 9px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; cursor: pointer;
+    background: none; border: none; color: var(--tx3);
+    font-family: 'Courier New', monospace;
+    border-bottom: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .stab:hover { color: var(--tx1); }
+  .stab.active { color: var(--acc); border-bottom-color: var(--acc); }
+  .stab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .stab-panel.active { display: flex; }
+  #capture-list { flex: 1; overflow-y: auto; overflow-x: hidden; }
+  #capture-list::-webkit-scrollbar { width: 4px; }
+  #capture-list::-webkit-scrollbar-thumb { background: var(--bd1); border-radius: 2px; }
+  .cap-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--bd2);
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .cap-item:hover { background: var(--sf2); }
+  .cap-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: opacity .15s; }
+  .cap-item.hidden .cap-dot { opacity: 0.2; }
+  .cap-info { flex: 1; overflow: hidden; }
+  .cap-name { color: var(--tx1); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Courier New', monospace; }
+  .cap-time { color: var(--tx3); font-size: 9px; margin-top: 1px; font-family: 'Courier New', monospace; }
+  .cap-del { font-size: 12px; color: var(--tx3); padding: 0 3px; cursor: pointer; flex-shrink: 0; }
+  .cap-del:hover { color: #dc2626; }
+  #capture-actions {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 10px;
+    border-top: 1px solid var(--bd2);
+    flex-shrink: 0;
+  }
+  #capture-actions button {
+    width: 100%; height: 40px;
+    border-radius: var(--r);
+    border: 1.5px solid var(--bd1);
+    background: var(--sf2); color: var(--tx2);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: .5px; cursor: pointer;
+    font-family: 'Courier New', monospace;
+    transition: all .15s;
+  }
+  #btn-capture { background: #dcfce7; border-color: #86efac; color: #166534; }
+  #btn-capture:hover { background: #bbf7d0; }
+  #btn-export:hover, #btn-import:hover { background: var(--sf); border-color: #9ca3af; }
+  #btn-cal-toggle { color: var(--tx2); }
+  #btn-cal-toggle.on { background: #eff6ff; border-color: #93c5fd; color: var(--acc); }
+
+  /* ─── Drone panel (dans sidebar) ────────────────────────── */
+  #drone-count {
+    background: var(--acc); color: #fff;
+    border-radius: 10px; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; min-width: 16px; text-align: center;
+  }
+  #drone-list {
+    flex: 1; overflow-y: auto; padding: 4px 0;
+  }
+  .drone-item {
+    padding: 7px 12px; cursor: pointer; border-bottom: 1px solid var(--bd2);
+    transition: background .1s;
+  }
+  .drone-item:hover { background: var(--sf2); }
+  .drone-item.selected { background: #eff6ff; }
+  .drone-row1 {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; color: var(--tx1);
+    font-family: 'Courier New', monospace;
+    white-space: nowrap; overflow: hidden;
+  }
+  .drone-id { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .drone-badge {
+    font-size: 9px; font-weight: 700; border-radius: 4px;
+    padding: 1px 4px; flex-shrink: 0;
+  }
+  .badge-dgac     { background: #dbeafe; color: #1d4ed8; }
+  .badge-eu       { background: #dcfce7; color: #166534; }
+  .badge-detect   { background: #f3f4f6; color: #6b7280; }
+  .badge-warn     { background: #fef9c3; color: #854d0e; }
+
+  /* ─── Alerte balise non autorisée ───────────────────────── */
+  #drone-alert {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    background: #dc2626; color: #fff;
+    display: none; align-items: center; justify-content: space-between;
+    padding: 0 16px; height: 40px;
+    font-size: 12px; font-weight: 700; letter-spacing: .5px;
+    font-family: 'Courier New', monospace;
+    box-shadow: 0 2px 12px rgba(220,38,38,.5);
+  }
+  #drone-alert.active { display: flex; animation: alert-blink 1s ease-in-out infinite; }
+  @keyframes alert-blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+  #alert-msg { display: flex; align-items: center; gap: 8px; }
+  #alert-auth-all {
+    background: rgba(255,255,255,.2); border: 1.5px solid rgba(255,255,255,.5);
+    color: #fff; border-radius: 6px; padding: 3px 10px;
+    font-size: 10px; font-weight: 700; cursor: pointer;
+    font-family: 'Courier New', monospace; letter-spacing: .5px;
+    transition: background .15s;
+  }
+  #alert-auth-all:hover { background: rgba(255,255,255,.35); }
+  #alert-mute {
+    background: none; border: none; color: rgba(255,255,255,.7);
+    font-size: 16px; cursor: pointer; padding: 0 6px; line-height: 1;
+    transition: color .15s;
+  }
+  #alert-mute:hover { color: #fff; }
+  #alert-right { display: flex; align-items: center; gap: 8px; }
+
+  /* ─── Bouton autoriser dans la carte drone ───────────────── */
+  .drone-auth-btn {
+    font-size: 9px; padding: 1px 5px;
+    background: #fee2e2; border: 1px solid #fca5a5;
+    border-radius: 4px; cursor: pointer; color: #dc2626;
+    font-family: 'Courier New', monospace; font-weight: 700;
+    flex-shrink: 0; transition: all .15s; white-space: nowrap;
+  }
+  .drone-auth-btn:hover { background: #fca5a5; }
+  .drone-authed {
+    font-size: 9px; color: #16a34a; font-weight: 700; flex-shrink: 0;
+  }
+  .drone-section-sep {
+    font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--tx3); padding: 6px 12px 3px; border-top: 1px solid var(--bd2); margin-top: 2px;
+  }
+  .drone-item.gone { opacity: 0.5; }
+  .drone-item.gone:hover { opacity: 0.8; }
+  .drone-row2 {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 10px; color: var(--tx3); margin-top: 2px;
+  }
+  .drone-rssi-bar {
+    height: 3px; border-radius: 2px; background: var(--bd1);
+    flex: 1; overflow: hidden;
+  }
+  .drone-rssi-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);
+    transition: width .4s;
+  }
+  .drone-rssi-val { font-size: 10px; color: var(--tx2); flex-shrink: 0; }
+
+  #drone-detail {
+    border-top: 1px solid var(--bd1);
+    padding: 10px 12px;
+    font-size: 10px; color: var(--tx2); line-height: 1.7;
+    max-height: 180px; overflow-y: auto;
+    flex-shrink: 0;
+  }
+  #drone-detail.hidden { display: none; }
+  #drone-detail .dd-row { display: flex; gap: 4px; }
+  #drone-detail .dd-label { color: var(--tx3); min-width: 52px; flex-shrink: 0; }
+  #drone-detail .dd-val { color: var(--tx1); font-family: 'Courier New', monospace; font-size: 10px; word-break: break-all; }
+
+  /* ─── Modal flottante drone ──────────────────────────────── */
+  #drone-modal {
+    position: fixed; top: 10vh; left: 17vw;
+    width: 66vw; height: 66vh;
+    min-width: 320px; min-height: 300px;
+    background: var(--sf);
+    border: 1px solid var(--bd1);
+    border-radius: var(--r2);
+    box-shadow: 0 12px 48px rgba(0,0,0,.28);
+    display: none; flex-direction: column;
+    z-index: 900; overflow: hidden;
+    resize: both;
+  }
+  #drone-modal.open { display: flex; }
+  #dm-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px;
+    background: var(--sf2); border-bottom: 1px solid var(--bd1);
+    cursor: move; user-select: none; flex-shrink: 0;
+  }
+  #dm-icon { font-size: 14px; }
+  #dm-title { flex: 1; font-size: 11px; font-weight: 700; font-family: 'Courier New', monospace; color: var(--tx1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #dm-badge-wrap { flex-shrink: 0; }
+  #dm-close { background: none; border: none; color: var(--tx3); font-size: 18px; cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0; }
+  #dm-close:hover { color: #dc2626; }
+  #dm-map { flex: 3; min-height: 0; }
+  #dm-center-btn {
+    margin: 6px 10px 2px; padding: 5px 10px;
+    background: var(--sf2); border: 1.5px solid var(--bd1);
+    border-radius: var(--r); font-size: 10px; font-weight: 600;
+    cursor: pointer; color: var(--tx2);
+    font-family: 'Courier New', monospace; width: calc(100% - 20px);
+    flex-shrink: 0; transition: all .15s; text-align: left;
+  }
+  #dm-center-btn:hover { background: #eff6ff; border-color: #93c5fd; color: var(--acc); }
+  #dm-info {
+    flex: 1; min-height: 0;
+    overflow-y: auto; font-size: 11px;
+  }
+  .dm-section { border-bottom: 1px solid var(--bd2); }
+  .dm-section-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px; cursor: pointer;
+    font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--tx3); text-transform: uppercase;
+    user-select: none; transition: background .1s;
+    font-family: 'Courier New', monospace;
+  }
+  .dm-section-hd:hover { background: var(--sf2); }
+  .dm-section-hd .dm-chev { font-size: 9px; transition: transform .2s; }
+  .dm-section-hd.collapsed .dm-chev { transform: rotate(-90deg); }
+  .dm-section-body {
+    display: grid; grid-template-columns: 110px 1fr;
+    padding: 2px 12px 8px; gap: 4px 6px;
+  }
+  .dm-section-body.hidden { display: none; }
+  .dm-section-body .dm-k {
+    color: var(--tx3); font-size: 10px;
+    display: flex; align-items: center;
+    font-family: 'Courier New', monospace; letter-spacing: .5px;
+  }
+  .dm-section-body .dm-v {
+    color: var(--tx1); font-size: 10px;
+    font-family: 'Courier New', monospace;
+    display: flex; align-items: center; word-break: break-all;
+  }
+  .dm-section-body .dm-v.hi { color: var(--acc); font-weight: 600; }
+  .dm-tlv-raw {
+    grid-column: 1 / -1;
+    background: var(--sf2); border: 1px solid var(--bd1); border-radius: 4px;
+    padding: 5px 8px; font-size: 9px; font-family: 'Courier New', monospace;
+    color: var(--tx2); word-break: break-all; line-height: 1.5;
+    position: relative;
+  }
+  #dm-copy-btn {
+    position: absolute; top: 4px; right: 6px;
+    font-size: 9px; padding: 2px 7px;
+    background: var(--sf); border: 1px solid var(--bd1);
+    border-radius: 4px; cursor: pointer; color: var(--tx2);
+    font-family: 'Courier New', monospace;
+  }
+  #dm-copy-btn:hover { background: var(--sf2); color: var(--acc); }
+
+  #drone-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--tx3); font-size: 11px; gap: 6px; padding: 20px;
+    text-align: center;
+  }
+  #drone-empty .de-icon { font-size: 28px; opacity: .4; }
+
+  /* ─── Canvas ────────────────────────────────────────────── */
+  #wrap { flex: 1; position: relative; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ─── Freq Range Sliders ─────────────────────────────────── */
+  #freq-range {
+    position: absolute; top: 5px; left: 54px; right: 24px;
+    height: 18px; z-index: 5; pointer-events: none;
+  }
+  #freq-track { position: absolute; inset: 0; pointer-events: none; }
+  #freq-track-line {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    left: 0; right: 0; height: 3px;
+    background: var(--bd1); border-radius: 2px;
+  }
+  #freq-fill {
+    position: absolute; top: 0; bottom: 0;
+    background: var(--acc); opacity: 0.35; border-radius: 2px;
+  }
+  .freq-handle {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    width: 52px; height: 16px; display: flex; align-items: center; justify-content: center;
+    background: var(--sf); border: 1.5px solid var(--acc); border-radius: 8px;
+    cursor: ew-resize; pointer-events: all;
+    font-family: 'Courier New', monospace; font-size: 9px; font-weight: 700;
+    color: var(--acc); white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,.14); user-select: none;
+  }
+  .freq-handle:hover, .freq-handle.dragging {
+    border-color: var(--acc2); box-shadow: 0 2px 8px rgba(26,95,180,.28);
+  }
+  #freq-ticks { position: absolute; left: 0; right: 0; top: calc(50% + 4px); height: 6px; pointer-events: none; }
+  .freq-tick  { position: absolute; top: 0; width: 1px; height: 5px; background: var(--bd1); transform: translateX(-50%); }
+
+  /* ─── Tooltip ───────────────────────────────────────────── */
+  #tip {
+    position: fixed; pointer-events: none; display: none;
+    background: rgba(15,23,42,.93);
+    border: 1px solid #334155;
+    border-radius: var(--r);
+    padding: 8px 12px;
+    font-size: 11px; line-height: 1.8;
+    z-index: 10; font-family: 'Courier New', monospace;
+  }
+  .tip-band { color: #64748b; font-size: 10px; }
+  .tip-freq { color: #94a3b8; }
+  .tip-rssi { color: #00ff88; font-size: 13px; font-weight: bold; }
+  .tip-peak { color: #ff8800; }
+
+  /* ─── No serial ─────────────────────────────────────────── */
+  #no-serial {
+    display: none; position: absolute; inset: 0;
+    background: rgba(234,236,242,.93);
+    flex-direction: column; justify-content: center; align-items: center;
+    gap: 12px; font-size: 15px; color: var(--tx2); text-align: center;
+  }
+  #no-serial a { color: var(--acc); }
+
+  /* ─── Calibration overlay ───────────────────────────────── */
+  #cal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15,23,42,.45);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cal-panel {
+    background: var(--sf); border: 1px solid var(--bd1);
+    border-radius: var(--r2); padding: 24px 28px; width: 360px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.15);
+    font-family: 'Courier New', monospace; color: var(--tx1);
+  }
+  #cal-header { font-size: 14px; color: var(--acc); letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px; }
+  #cal-sub { font-size: 11px; color: var(--tx3); margin-bottom: 16px; }
+  #cal-step-box {
+    background: var(--sf2); border: 1px solid var(--bd1); border-radius: var(--r);
+    padding: 10px 14px; margin-bottom: 14px;
+  }
+  #cal-step-label { font-size: 13px; color: var(--tx1); font-weight: 700; letter-spacing: .5px; margin-bottom: 3px; }
+  #cal-step-hint  { font-size: 11px; color: var(--tx3); }
+  #cal-progress-track { height: 5px; background: var(--bd2); border-radius: 3px; margin-bottom: 6px; overflow: hidden; }
+  #cal-progress-fill  { height: 5px; background: var(--acc); border-radius: 3px; width: 0%; transition: width .3s; }
+  #cal-progress-text  { font-size: 10px; color: var(--tx3); margin-bottom: 14px; }
+  #cal-ch-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 18px; min-height: 160px; }
+  .cal-ch-row  { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+  .cal-ch-name { width: 28px; color: var(--tx2); font-weight: 700; }
+  .cal-ch-bar-track { flex: 1; height: 6px; background: var(--bd2); border-radius: 3px; overflow: hidden; }
+  .cal-ch-bar-fill  { height: 6px; background: var(--acc); border-radius: 3px; transition: width .3s; }
+  .cal-ch-val { width: 32px; text-align: right; color: var(--tx3); }
+  .cal-ch-off { width: 38px; text-align: right; font-size: 10px; color: var(--tx3); }
+  .cal-ch-off.pos { color: #166534; }
+  .cal-ch-off.neg { color: #991b1b; }
+  .cal-ch-row.done    .cal-ch-name { color: #166534; }
+  .cal-ch-row.current .cal-ch-name { color: #c2540a; }
+  .cal-ch-row.current .cal-ch-bar-fill { background: #f59e0b; }
+  #cal-btns { display: flex; gap: 8px; }
+  #cal-btns button {
+    flex: 1; height: 42px;
+    border-radius: var(--r); border: 1.5px solid var(--bd1);
+    background: var(--sf2); color: var(--tx2);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: 'Courier New', monospace; letter-spacing: .5px;
+    transition: all .15s;
+  }
+  #btn-cal-measure { background: #dcfce7; border-color: #86efac; color: #166534; }
+  #btn-cal-next    { background: #fefce8; border-color: #fde68a; color: #78350f; }
+  #btn-cal-apply   { background: #eff6ff; border-color: #93c5fd; color: var(--acc); }
+  #btn-cal-cancel  { flex: 0 0 44px !important; background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+  #btn-cal-measure:disabled, #btn-cal-next:disabled, #btn-cal-apply:disabled { opacity: .3; cursor: default; }
+
+  /* ─── Flash overlay ─────────────────────────────────────── */
+  #flash-file-input { display: none; }
+  #flash-file-label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: var(--r);
+    border: 1.5px dashed var(--bd1); cursor: pointer;
+    font-size: 12px; color: var(--tx2);
+    background: var(--sf2); transition: border-color .15s, color .15s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+  }
+  #flash-file-label:hover { border-color: var(--acc); color: var(--acc); }
+  #flash-addr-input {
+    width: 80px; height: 34px; padding: 0 8px;
+    border: 1px solid var(--bd1); border-radius: var(--r);
+    background: var(--sf); color: var(--tx1);
+    font-size: 12px; font-family: 'Courier New', monospace;
+    outline: none; flex-shrink: 0;
+  }
+  #flash-log {
+    flex: 1; overflow-y: auto;
+    background: #0f172a; border-radius: 6px;
+    padding: 10px 12px; font-family: 'Courier New', monospace;
+    font-size: 11px; color: #94a3b8; line-height: 1.7;
+    min-height: 120px; max-height: 200px;
+  }
+  #flash-log .flash-ok    { color: #4ade80; }
+  #flash-log .flash-error { color: #f87171; }
+  #flash-log .flash-info  { color: #60a5fa; }
+  #flash-log .flash-warn  { color: #fbbf24; }
+  #flash-prog-wrap {
+    height: 6px; background: var(--bd2); border-radius: 3px; overflow: hidden;
+  }
+  #flash-prog-bar {
+    height: 100%; width: 0; background: var(--acc);
+    border-radius: 3px; transition: width .15s;
+  }
+  #flash-pct { font-size: 11px; color: var(--tx3); min-width: 32px; text-align: right; }
+  #flash-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15,23,42,.45);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #flash-panel {
+    background: var(--sf); border: 1px solid var(--bd1);
+    border-radius: var(--r2); padding: 24px 28px; width: 380px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.15);
+    font-family: 'Courier New', monospace; color: var(--tx1);
+  }
+  #flash-header { font-size: 14px; color: var(--acc); letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px; }
+  #flash-sub { font-size: 11px; color: var(--tx3); margin-bottom: 16px; }
+  #flash-baud-sel { font-size: 12px; color: var(--tx2); background: var(--sf2); border: 1px solid var(--bd1); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  #flash-dropzone {
+    border: 2px dashed var(--bd1); border-radius: var(--r);
+    padding: 20px; text-align: center; margin-bottom: 14px;
+    transition: border-color .2s, background .2s;
+  }
+  #flash-dropzone.drag-over { border-color: var(--acc); background: #eff6ff; }
+  #flash-drop-label { font-size: 13px; color: var(--tx2); margin-bottom: 6px; }
+  #flash-drop-sub { font-size: 11px; color: var(--tx3); margin-bottom: 10px; }
+  #flash-dropzone button {
+    height: 34px; padding: 0 16px;
+    border-radius: var(--r); border: 1.5px solid var(--bd1);
+    background: var(--sf2); color: var(--tx2);
+    font-size: 12px; cursor: pointer; font-family: 'Courier New', monospace;
+  }
+  #flash-filename {
+    font-size: 12px; color: var(--acc); margin-bottom: 12px;
+    padding: 8px 12px; background: #eff6ff; border-radius: var(--r);
+    border: 1px solid #bfdbfe; word-break: break-all;
+  }
+  #flash-progress-track { height: 5px; background: var(--bd2); border-radius: 3px; margin-bottom: 8px; overflow: hidden; }
+  #flash-progress-fill  { height: 5px; background: var(--acc); border-radius: 3px; width: 0%; transition: width .25s; }
+  #flash-status { font-size: 11px; color: var(--tx3); margin-bottom: 16px; min-height: 16px; }
+  #flash-btns { display: flex; gap: 8px; }
+  #flash-btns button {
+    flex: 1; height: 42px;
+    border-radius: var(--r); border: 1.5px solid var(--bd1);
+    background: var(--sf2); color: var(--tx2);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: 'Courier New', monospace; letter-spacing: .5px;
+    transition: all .15s;
+  }
+  #btn-flash-start { background: #eff6ff; border-color: #93c5fd; color: var(--acc); }
+  #btn-flash-start:not(:disabled):hover { background: #dbeafe; }
+  #btn-flash-start:disabled { opacity: .3; cursor: default; }
+  #btn-flash-close { flex: 0 0 80px; }
+  #btn-flash-close:hover { background: var(--sf); border-color: #9ca3af; }
+  .flash-error { color: #991b1b !important; }
+  .flash-ok    { color: #166534 !important; }
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════ -->
+<div id="header">
+  <div id="title">RX5808<span>SPECTRUM · 5.8 GHz &nbsp;·&nbsp; V3 ESP32-S3</span></div>
+
+  <div id="status-area">
+    <div id="dot"></div>
+    <span id="status-text">Déconnecté</span>
+  </div>
+
+  <div class="hdr-sep"></div>
+
+  <span class="hdr-label">Baud</span>
+  <select id="sel-baud">
+    <option value="115200" selected>115200</option>
+    <option value="57600">57600</option>
+    <option value="9600">9600</option>
+  </select>
+  <button id="btn-connect">◉ CONNECTER</button>
+</div>
+
+<!-- ═══ CONTROLS ══════════════════════════════════════════ -->
+<div id="controls">
+
+  <!-- Résolution (toujours visible, touches larges) -->
+  <button class="btn-step btn-step-off" data-step="0">OFF</button>
+  <button class="btn-step active" data-step="5">5 MHz</button>
+  <button class="btn-step" data-step="2">2 MHz</button>
+  <button class="btn-step" data-step="1">1 MHz</button>
+
+  <div class="ctrl-sep"></div>
+
+  <!-- Dropdown Bandes -->
+  <div class="dropdown">
+    <button class="dropdown-trigger" aria-haspopup="true">
+      Bandes <span class="dd-arrow">▾</span>
+    </button>
+    <div class="dropdown-menu">
+      <span class="dd-label">Bandes visibles</span>
+      <div class="band-chips">
+        <button class="btn-band"            data-band="0" style="color:#d94020;border-color:#d94020">R</button>
+        <button class="btn-band hidden-band" data-band="1" style="color:#d48000;border-color:#d48000">B</button>
+        <button class="btn-band hidden-band" data-band="2" style="color:#1a8040;border-color:#1a8040">E</button>
+        <button class="btn-band hidden-band" data-band="3" style="color:#1870cc;border-color:#1870cc">F</button>
+        <button class="btn-band hidden-band" data-band="4" style="color:#8840cc;border-color:#8840cc">A</button>
+        <button class="btn-band hidden-band" data-band="5" style="color:#008870;border-color:#008870">O3</button>
+        <button class="btn-band hidden-band" data-band="6" style="color:#cc6600;border-color:#cc6600">DV</button>
+        <button class="btn-band hidden-band" data-band="7" style="color:#0070bb;border-color:#0070bb">D4</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dropdown Analyse -->
+  <div class="dropdown">
+    <button class="dropdown-trigger" aria-haspopup="true" id="dd-analyse-trigger">
+      Analyse <span class="dd-arrow">▾</span>
+    </button>
+    <div class="dropdown-menu">
+      <button id="btn-focus">⊙ Focus</button>
+      <button id="btn-im3" class="on">IM3</button>
+      <button id="btn-im5" class="on">IM5</button>
+      <div class="dd-div focus-only" style="display:none"></div>
+      <span class="dd-label focus-only" style="display:none">Presets</span>
+      <button class="btn-preset focus-only" data-preset="R1367" style="display:none">R1367</button>
+      <button class="btn-preset focus-only" data-preset="IMD5C" style="display:none">IMD5C</button>
+      <button class="btn-preset focus-only" data-preset="IMD6C" style="display:none">IMD6C</button>
+    </div>
+  </div>
+
+  <!-- Dropdown Outils -->
+  <div class="dropdown">
+    <button class="dropdown-trigger" aria-haspopup="true">
+      Outils <span class="dd-arrow">▾</span>
+    </button>
+    <div class="dropdown-menu">
+      <button id="btn-diag">⚙ Diagnostic RSSI</button>
+      <button id="btn-flash-open">⬆ Mettre à jour firmware</button>
+      <div class="dd-div"></div>
+      <button id="btn-buzzer-web">🔊 Bip web</button>
+      <div class="dd-div"></div>
+      <button id="btn-day" class="on">☀ Mode Jour (canvas)</button>
+    </div>
+  </div>
+
+  <div class="ctrl-sep"></div>
+
+  <!-- Toggles rapides -->
+  <button id="btn-peak" class="btn-toggle">⊕ Peak</button>
+  <button id="btn-scale" class="btn-toggle">⇕ Auto-Scale</button>
+
+  <div class="ctrl-sep"></div>
+
+  <span id="lbl-step-info">61 canaux · ~1.5s/sweep</span>
+</div>
+
+<!-- ═══ STATS ══════════════════════════════════════════════ -->
+<div id="stats">
+  <span>SCAN/s <span class="sv" id="sv-fps">—</span></span>
+  <span>CANAUX <span class="sv" id="sv-ch">—</span></span>
+  <span>PEAK FREQ <span class="sv hi" id="sv-pf">—</span></span>
+  <span>PEAK RSSI <span class="sv hi" id="sv-pr">—</span></span>
+  <span>PLAGE <span class="sv" id="sv-range">—</span></span>
+  <span>SCALE <span class="sv" id="sv-scale">—</span></span>
+</div>
+
+<!-- ═══ ZONE PRINCIPALE ════════════════════════════════════ -->
+<div id="main-area">
+
+  <!-- ── Sidebar unifiée ────────────────────────────────── -->
+  <div id="left-sidebar">
+    <div id="sidebar-tabs">
+      <button class="stab active" onclick="switchTab('drones',this)">
+        DRONES <span id="drone-count">0</span>
+      </button>
+      <button class="stab" onclick="switchTab('captures',this)">CAPTURES</button>
+    </div>
+
+    <!-- Onglet Drones -->
+    <div id="tab-drones" class="stab-panel active">
+      <div id="drone-list">
+        <div id="drone-empty">
+          <div class="de-icon">🛸</div>
+          <div>Aucune balise<br>détectée</div>
+        </div>
+      </div>
+      <div id="drone-detail" class="hidden"></div>
+    </div>
+
+    <!-- Onglet Captures -->
+    <div id="tab-captures" class="stab-panel">
+      <div id="capture-list"></div>
+      <div id="capture-actions">
+        <button id="btn-capture">⊕ CAPTURER</button>
+        <button id="btn-export">↓ EXPORTER</button>
+        <button id="btn-import">↑ IMPORTER</button>
+        <input type="file" id="import-file" accept=".json" style="display:none">
+        <button id="btn-cal-toggle" title="Calibration antenne R1-R8">⊗ CALIBRER</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Calibration overlay ─────────────────────────────── -->
+  <div id="cal-overlay" style="display:none;">
+    <div id="cal-panel">
+      <div id="cal-header">⊗ CALIBRATION ANTENNE</div>
+      <div id="cal-sub">Drone à 1m · 25mW · Raceband R1→R8 (canal par canal)</div>
+      <div id="cal-step-box">
+        <div id="cal-step-label">—</div>
+        <div id="cal-step-hint">Appuyez sur MESURER pour commencer</div>
+      </div>
+      <div id="cal-progress-track"><div id="cal-progress-fill"></div></div>
+      <div id="cal-progress-text">—</div>
+      <div id="cal-ch-list"></div>
+      <div id="cal-btns">
+        <button id="btn-cal-measure">▶ MESURER</button>
+        <button id="btn-cal-next" disabled>→ SUIVANT</button>
+        <button id="btn-cal-apply" disabled>✓ APPLIQUER</button>
+        <button id="btn-cal-cancel">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Flash overlay ──────────────────────────────────── -->
+  <div id="flash-overlay" style="display:none;">
+    <div id="flash-panel">
+      <div id="flash-header">⬆ MISE À JOUR FIRMWARE</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:16px;">
+        ESP32-S3 · esptool-js via Web Serial
+      </div>
+
+      <!-- Fichier + adresse -->
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <input type="file" id="flash-file-input" accept=".bin">
+        <label for="flash-file-input" id="flash-file-label">📂 Choisir un fichier .bin</label>
+        <span style="font-size:11px;color:var(--tx3);flex-shrink:0;">@ 0x</span>
+        <input id="flash-addr-input" type="text" value="0" placeholder="0" title="Adresse flash hex (ex: 0 = 0x0)">
+      </div>
+
+      <!-- Barre de progression -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <div id="flash-prog-wrap" style="flex:1;">
+          <div id="flash-prog-bar"></div>
+        </div>
+        <span id="flash-pct">0%</span>
+      </div>
+
+      <!-- Log -->
+      <div id="flash-log"><span style="color:#475569;">En attente…</span></div>
+
+      <!-- Note bootloader -->
+      <div style="font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.6;">
+        ⚡ Si le flash ne démarre pas : maintenir <strong>BOOT</strong>, appuyer sur <strong>RESET</strong>, relâcher <strong>RESET</strong> puis <strong>BOOT</strong>.
+      </div>
+
+      <div id="flash-btns" style="margin-top:16px;">
+        <button id="btn-flash-start">⚡ Flasher</button>
+        <button id="btn-flash-close">✕ Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Canvas ──────────────────────────────────────────── -->
+  <div id="wrap">
+    <canvas id="cv"></canvas>
+    <!-- ── Freq Range Sliders ─── -->
+    <div id="freq-range">
+      <div id="freq-track">
+        <div id="freq-track-line"><div id="freq-fill"></div></div>
+        <div id="freq-ticks"></div>
+        <div class="freq-handle" id="freq-handle-l">5645</div>
+        <div class="freq-handle" id="freq-handle-r">5945</div>
+      </div>
+    </div>
+    <div id="tip">
+      <div class="tip-band" id="tt-band"></div>
+      <div class="tip-freq" id="tt-freq"></div>
+      <div class="tip-rssi" id="tt-rssi"></div>
+      <div class="tip-peak" id="tt-peak"></div>
+    </div>
+    <div id="no-serial">
+      <div>⚠ Web Serial API non disponible</div>
+      <div>Utilise <b>Chrome</b> ou <b>Edge</b> ≥ 89</div>
+    </div>
+  </div>
+
+</div><!-- /#main-area -->
+
+<script>
+// ════════════════════════════════════════════════════════
+//  DÉFINITION DES BANDES
+// ════════════════════════════════════════════════════════
+
+const BAND_DEFS = [
+  { name: 'RACEBAND', short: 'R', color: '#ff5533',
+    freqs: [5658,5695,5732,5769,5806,5843,5880,5917] },
+  { name: 'BAND B',   short: 'B', color: '#ffaa00',
+    freqs: [5733,5752,5771,5790,5809,5828,5847,5866] },
+  { name: 'BAND E',   short: 'E', color: '#44ff88',
+    freqs: [5705,5685,5665,5645,5885,5905,5925,5945] },
+  { name: 'FATSHARK', short: 'F', color: '#44aaff',
+    freqs: [5740,5760,5780,5800,5820,5840,5860,5880] },
+  { name: 'BAND A',   short: 'A', color: '#cc66ff',
+    freqs: [5865,5845,5825,5805,5785,5765,5745,5725] },
+  { name: 'DJI O3 CE',    short: 'O3', color: '#00e5cc',
+    freqs: [5768,5804,5839], chanNums: [3,4,5] },
+  { name: 'DJI VISTA CE', short: 'DV', color: '#ff9900',
+    freqs: [5735,5770,5805,5839], chanNums: [3,4,5,8] },
+  { name: 'DJI O4 RACE',  short: 'D4', color: '#00aaff',
+    freqs: [5658,5695,5732,5769,5806,5843,5880,5917] },
+];
+
+// Pré-calcul plages et labels canaux (R1…R8, B1…B8, …)
+for (const b of BAND_DEFS) {
+  const sorted = [...b.freqs].sort((a, z) => a - z);
+  b.fMin = sorted[0];
+  b.fMax = sorted[sorted.length - 1];
+  // channels : [{freq, label}] trié par fréquence croissante
+  b.channels = sorted.map((f, i) => {
+    const origIdx = b.freqs.indexOf(f);
+    const num = b.chanNums ? b.chanNums[origIdx] : origIdx + 1;
+    return { freq: f, label: b.short + num };
+  });
+}
+
+// Visibilité des bandes
+const bandVisible = [true, false, false, false, false, false, false, false]; // R uniquement par défaut
+
+// Associe une fréquence à sa bande (priorité : premier match)
+function getBand(freq) {
+  for (const b of BAND_DEFS) {
+    if (freq >= b.fMin && freq <= b.fMax) return b;
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════════════
+//  ÉTAT
+// ════════════════════════════════════════════════════════
+
+const FMIN = 5645, FMAX = 5945;
+
+let port = null, reader = null, writer = null;
+let peakOn = false;
+let autoScale = false;
+
+let data = [];
+let lastFpsTime = 0, frameCount = 0, fps = 0;
+let lastSweepTime = 0, sweepDuration = 2500; // ms estimé entre deux sweeps
+const PEAK_HOLD_MS = 3500;
+
+// ── Échelle Y (auto-scale) ──────────────────────────────
+// Le RX5808 sort 0–~1V → ADC 0–~200 typiquement.
+// L'auto-scale adapte l'axe Y aux valeurs réellement reçues.
+let scaleMin = 144, scaleMax = 365;        // valeurs cibles
+let dispMin  = 100, dispMax  = 250;        // valeurs affichées (lissées)
+const SCALE_MARGIN  = 20;                  // marge au-dessus du max
+const SCALE_SMOOTH  = 0.04;               // vitesse de lissage
+
+// ════════════════════════════════════════════════════════
+//  WEB SERIAL
+// ════════════════════════════════════════════════════════
+
+const dot    = document.getElementById('dot');
+const stText = document.getElementById('status-text');
+const btnCon = document.getElementById('btn-connect');
+
+function setStatus(cls, txt) { dot.className = cls; stText.textContent = txt; }
+
+btnCon.addEventListener('click', () => port ? disconnect() : connect());
+
+async function connect() {
+  if (!navigator.serial) {
+    document.getElementById('no-serial').style.display = 'flex'; return;
+  }
+  try {
+    setStatus('connecting', 'Connexion…');
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: +document.getElementById('sel-baud').value });
+
+    // Reader
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    reader = dec.readable.getReader();
+
+    // Writer
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+
+    setStatus('connected', 'Connecté');
+    btnCon.textContent = '◉ DÉCONNECTER'; btnCon.classList.add('disc');
+
+    const activeStep = document.querySelector('.btn-step.active');
+    if (activeStep && parseInt(activeStep.dataset.step) > 0) sendStep(parseInt(activeStep.dataset.step));
+    writer.write(`RANGE:${sliderFMin},${sliderFMax}\n`).catch(() => {});
+
+    startReading();
+  } catch(e) {
+    port = null; writer = null;
+    setStatus('error', 'Erreur: ' + e.message);
+    btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
+  }
+}
+
+async function disconnect() {
+  try {
+    if (reader) { await reader.cancel(); reader = null; }
+    if (writer) { await writer.close();  writer = null; }
+    if (port)   { await port.close();    port = null;   }
+  } catch(_) {}
+  setStatus('', 'Déconnecté');
+  btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
+}
+
+async function startReading() {
+  let buf = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let nl;
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line.startsWith('BOOT:')) {
+          handleBoot(line.slice(5));
+        } else if (line.startsWith('ACK:')) {
+          setStatus('connected', 'Connecté · ' + line.replace('ACK:', ''));
+          // Changement de fréquences : vider data pour réinitialiser
+          if (line.startsWith('ACK:STEP') || line.startsWith('ACK:FOCUS')) {
+            data = []; dataMap.clear(); currentScanFreq = -1;
+            ignoreData = false;
+          }
+          if (line.startsWith('ACK:RANGE')) {
+            data = data.filter(d => d.freq >= sliderFMin && d.freq <= sliderFMax);
+            dataMap.clear(); data.forEach(d => dataMap.set(d.freq, d));
+          }
+        } else if (line.startsWith('DIAG:')) {
+          handleDiag(line.slice(5));
+        } else if (line.startsWith('{')) {
+          handleDroneJSON(line);
+        } else if (line.length > 0) {
+          parseLine(line);
+        }
+      }
+    }
+  } catch(e) {
+    if (port) setStatus('error', 'Lecture: ' + e.message);
+  }
+}
+
+async function sendStep(step) {
+  if (writer) { try { await writer.write(`STEP:${step}\n`); } catch(_) {} }
+}
+
+async function sendScale(mn, mx) {
+  if (writer) { try { await writer.write(`SCALE:${mn},${mx}\n`); } catch(_) {} }
+}
+
+async function sendDiag() {
+  if (writer) { try { await writer.write('DIAG\n'); } catch(_) {} }
+}
+
+// ════════════════════════════════════════════════════════════
+//  REGISTRE DRONES AUTORISÉS (effacé au reload)
+// ════════════════════════════════════════════════════════════
+
+const droneRegistry = new Set();
+
+function addToRegistry(id) {
+  droneRegistry.add(id);
+  renderDronePanel();
+  updateDroneAlert();
+}
+
+function authorizeAll() {
+  droneMap.forEach((_, id) => droneRegistry.add(id));
+  renderDronePanel();
+  updateDroneAlert();
+}
+
+let buzzerWebMuted = false;
+let alertWasActive = false;
+
+function beepAlert() {
+  if (buzzerWebMuted) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(900, ctx.currentTime);
+    osc.frequency.setValueAtTime(700, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch(_) {}
+}
+
+function toggleBuzzerWeb() {
+  buzzerWebMuted = !buzzerWebMuted;
+  const btn = document.getElementById('btn-buzzer-web');
+  if (btn) btn.textContent = (buzzerWebMuted ? '🔇' : '🔊') + ' Bip web';
+}
+
+function updateDroneAlert() {
+  const unauth = [...droneMap.keys()].filter(id => !droneRegistry.has(id));
+  const banner = document.getElementById('drone-alert');
+  if (unauth.length === 0) {
+    banner.classList.remove('active');
+    alertWasActive = false;
+  } else {
+    banner.classList.add('active');
+    const txt = unauth.length === 1
+      ? 'BALISE NON AUTORISÉE DÉTECTÉE'
+      : unauth.length + ' BALISES NON AUTORISÉES DÉTECTÉES';
+    document.getElementById('alert-txt').textContent = txt;
+    if (!alertWasActive) { beepAlert(); alertWasActive = true; }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  SIDEBAR TABS
+// ════════════════════════════════════════════════════════════
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.stab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════
+//  DRONE BEACON PANEL
+// ════════════════════════════════════════════════════════════
+
+const droneMap    = new Map(); // id → {id, type, lat, lon, alt, altSol, speed, cap, rssi, lastSeen, mac, opId}
+const droneGoneMap = new Map(); // balises expirées (pour section déconnecté)
+let selectedDroneId = null;
+
+function handleDroneJSON(line) {
+  let obj;
+  try { obj = JSON.parse(line); } catch(_) { return; }
+
+  // Timeout / suppression → section déconnecté
+  if (obj.event === 'timeout' && obj.id) {
+    const gone = droneMap.get(obj.id);
+    droneMap.delete(obj.id);
+    if (gone) { gone.goneAt = Date.now(); droneGoneMap.set(obj.id, gone); }
+    if (selectedDroneId === obj.id) {
+      selectedDroneId = null;
+      document.getElementById('drone-detail').classList.add('hidden');
+    }
+    renderDronePanel();
+    updateDroneAlert();
+    return;
+  }
+
+  if (!obj.id) return;
+
+  // Balise revenue → sortir de la section déconnecté
+  if (droneGoneMap.has(obj.id)) droneGoneMap.delete(obj.id);
+
+  // Mise à jour ou création
+  const existing = droneMap.get(obj.id) || { id: obj.id };
+  const merged = Object.assign(existing, obj, { lastSeen: Date.now() });
+  droneMap.set(obj.id, merged);
+  updateDroneAlert();
+
+  if (selectedDroneId === obj.id && document.getElementById('drone-modal').classList.contains('open')) {
+    renderModalInfo(merged);
+    updateDroneMarker(merged);
+  }
+  renderDronePanel();
+}
+
+function rssiPercent(rssi) {
+  // RSSI en dBm (−100 à −40 typique) ou absent → 0-100
+  if (rssi == null) return 50;
+  if (typeof rssi === 'number' && rssi < 0) return Math.max(0, Math.min(100, (rssi + 100) * 1.67));
+  return 50;
+}
+
+function typeBadge(state) {
+  if (!state) return '<span class="drone-badge badge-detect">?</span>';
+  if (state === 'DGAC') return '<span class="drone-badge badge-dgac">DGAC</span>';
+  if (state === 'DGAC-WARN') return '<span class="drone-badge badge-warn">DGAC!</span>';
+  if (state.startsWith('EU-RID'))  return '<span class="drone-badge badge-eu">EU-RID</span>';
+  if (state.startsWith('EU-PART')) return '<span class="drone-badge badge-warn">EU-PART</span>';
+  if (state.startsWith('EU-DET'))  return '<span class="drone-badge badge-detect">EU?</span>';
+  return `<span class="drone-badge badge-detect">${state}</span>`;
+}
+
+function renderDronePanel() {
+  const list   = document.getElementById('drone-list');
+  const empty  = document.getElementById('drone-empty');
+  const count  = document.getElementById('drone-count');
+
+  count.textContent = droneMap.size;
+  count.style.background = droneMap.size ? 'var(--acc)' : '#9ca3af';
+
+  if (droneMap.size === 0 && droneGoneMap.size === 0) {
+    list.innerHTML = '';
+    list.appendChild(empty);
+    return;
+  }
+
+  const droneItem = (d, gone) => {
+    const pct     = rssiPercent(d.rssi);
+    const rssiStr = d.rssi != null ? (typeof d.rssi === 'number' && d.rssi < 0 ? d.rssi + ' dBm' : d.rssi) : '—';
+    const shortId = (d.id || '?').slice(-12);
+    const sel     = d.id === selectedDroneId ? ' selected' : '';
+    const isAuthed = droneRegistry.has(d.id);
+    const authEl  = gone
+      ? (isAuthed ? `<span class="drone-authed" title="Autorisé">✓</span>` : '')
+      : (isAuthed
+          ? `<span class="drone-authed" title="Autorisé">✓</span>`
+          : `<button class="drone-auth-btn" title="Ajouter au registre" onclick="event.stopPropagation();addToRegistry('${d.id}')">AUTOR.</button>`);
+    const rowRssi = gone ? '' : `<div class="drone-row2">
+        <div class="drone-rssi-bar"><div class="drone-rssi-fill" style="width:${pct}%"></div></div>
+        <span class="drone-rssi-val">${rssiStr}</span>
+      </div>`;
+    return `<div class="drone-item${gone?' gone':''}${sel}" data-id="${d.id}" onclick="selectDrone('${d.id}')">
+      <div class="drone-row1">
+        <span class="drone-id" title="${d.id}">${shortId}</span>
+        ${typeBadge(d.state)}
+        ${authEl}
+      </div>${rowRssi}
+    </div>`;
+  };
+
+  let html = '';
+  if (droneMap.size > 0) {
+    const drones = [...droneMap.values()].sort((a, b) => b.lastSeen - a.lastSeen);
+    html += drones.map(d => droneItem(d, false)).join('');
+  }
+  if (droneGoneMap.size > 0) {
+    const gones = [...droneGoneMap.values()].sort((a, b) => b.goneAt - a.goneAt);
+    html += `<div class="drone-section-sep">◌ Déconnecté</div>`;
+    html += gones.map(d => droneItem(d, true)).join('');
+  }
+  list.innerHTML = html;
+}
+
+function selectDrone(id) {
+  selectedDroneId = id;
+  const d = droneMap.get(id) || droneGoneMap.get(id);
+  document.querySelectorAll('.drone-item').forEach(el =>
+    el.classList.toggle('selected', el.dataset.id === id));
+  if (d) openDroneModal(d);
+}
+
+// ─── Modal flottante ──────────────────────────────────────
+
+let leafMap = null, leafDrone = null, leafUser = null, leafHome = null;
+
+function openDroneModal(d) {
+  const modal = document.getElementById('drone-modal');
+  modal.classList.add('open');
+
+  const shortId = (d.id || '?').slice(-12);
+  document.getElementById('dm-title').textContent = shortId;
+  document.getElementById('dm-badge-wrap').innerHTML = typeBadge(d.state);
+
+  renderModalInfo(d);
+
+  // Init carte Leaflet
+  if (!leafMap) {
+    leafMap = L.map('dm-map', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
+      .addTo(leafMap);
+  }
+  setTimeout(() => leafMap.invalidateSize(), 50);
+  updateDroneMarker(d);
+}
+
+function updateDroneMarker(d) {
+  if (!leafMap) return;
+  const hasPos = d.lat && d.lon && (Math.abs(d.lat) > 0.0001 || Math.abs(d.lon) > 0.0001);
+  if (!hasPos) {
+    if (!leafDrone) leafMap.setView([46.6, 2.4], 5); // France
+    return;
+  }
+  if (!leafDrone) {
+    leafDrone = L.circleMarker([d.lat, d.lon], {
+      radius: 9, color: '#1a5fb4', fillColor: '#3b82f6', fillOpacity: 0.9, weight: 2
+    }).addTo(leafMap).bindPopup((d.id || '').slice(-12));
+  } else {
+    leafDrone.setLatLng([d.lat, d.lon]);
+  }
+  leafMap.setView([d.lat, d.lon], leafMap.getZoom() > 3 ? leafMap.getZoom() : 14);
+
+  // Marqueur point de décollage 🏠
+  const hasHome = d.home_lat && d.home_lon && Math.abs(d.home_lat) > 0.0001;
+  if (hasHome) {
+    const homeIcon = L.divIcon({
+      html: '<div style="font-size:18px;line-height:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))">🏠</div>',
+      className: '', iconSize: [22, 22], iconAnchor: [11, 20]
+    });
+    if (!leafHome) {
+      leafHome = L.marker([d.home_lat, d.home_lon], { icon: homeIcon })
+        .addTo(leafMap).bindPopup('Point de décollage');
+    } else {
+      leafHome.setLatLng([d.home_lat, d.home_lon]);
+    }
+  } else if (leafHome) {
+    leafMap.removeLayer(leafHome);
+    leafHome = null;
+  }
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000, rad = Math.PI / 180;
+  const φ1 = lat1 * rad, φ2 = lat2 * rad;
+  const Δφ = (lat2 - lat1) * rad, Δλ = (lon2 - lon1) * rad;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+function renderModalInfo(d) {
+  const fmtC = v => (v != null && Math.abs(v) > 0.0001) ? v.toFixed(6) + '°' : '—';
+  const fmtA = v => (v != null && v !== 0) ? v.toFixed(1) + ' m' : '—';
+  const fmtS = v => (v != null && v !== 0) ? v.toFixed(1) + ' m/s' : '—';
+  const kv   = (k, v, hi) =>
+    `<span class="dm-k">${k}</span><span class="dm-v${hi?' hi':''}">${v ?? '—'}</span>`;
+
+  // Distance décollage → position actuelle (firmware field: home_lat/home_lon)
+  let dist = '—';
+  const hl = d.home_lat, ho = d.home_lon;
+  if (hl && ho && d.lat && d.lon && Math.abs(hl) > 0.0001 && Math.abs(d.lat) > 0.0001) {
+    const m = haversine(hl, ho, d.lat, d.lon);
+    dist = m < 1000 ? m + ' m' : (m/1000).toFixed(2) + ' km';
+  }
+
+  // Altitude label (firmware: alt_type = "hauteur" | "altitude")
+  const altLabel = d.alt_type === 'hauteur' ? 'HAUTEUR' : 'ALTITUDE';
+  // Vitesse verticale (EU-RID)
+  const svStr = (d.speed_v != null && d.speed_v !== 0) ? fmtS(d.speed_v) : null;
+  // Type aéronef EU-RID
+  const uaStr = d.eu_ua_str || null;
+  const catStr = d.eu_cat_str ? `${d.eu_cat_str} C${d.eu_class ?? '?'}` : null;
+
+  const sections = [
+    { title: '◆ POSITION', rows: [
+      kv('LAT',         fmtC(d.lat)),
+      kv('LON',         fmtC(d.lon)),
+      kv(altLabel,      fmtA(d.alt)),
+    ]},
+    { title: '◆ VOL', rows: [
+      kv('VITESSE',     fmtS(d.speed)),
+      ...(svStr ? [kv('VITESSE V', svStr)] : []),
+      kv('CAP',         d.heading != null ? d.heading + '°' : '—'),
+      kv('RSSI',        d.rssi != null ? d.rssi + ' dBm' : '—'),
+    ]},
+    { title: '◆ POINT DE DÉCOLLAGE', rows: [
+      kv('LAT',  fmtC(hl)),
+      kv('LON',  fmtC(ho)),
+      kv('DIST', dist, dist !== '—'),
+    ]},
+    { title: '◆ IDENTIFIANTS', rows: [
+      kv('ID',       d.id       || '—'),
+      kv('ID CONST', d.id_const || d.eu_op_id || '—'),
+      kv('MAC',      d.mac      || '—'),
+      kv('ÉTAT',     d.state    || '—'),
+      ...(uaStr  ? [kv('TYPE UA',   uaStr)]  : []),
+      ...(catStr ? [kv('CATÉGORIE', catStr)] : []),
+    ]},
+  ];
+
+  document.getElementById('dm-info').innerHTML = sections.map((s, i) => {
+    const bodyId = 'dm-sb-' + i;
+    const body = `<div class="dm-section-body" id="${bodyId}">${s.rows.join('')}</div>`;
+    return `<div class="dm-section">
+      <div class="dm-section-hd" onclick="toggleDmSection('${bodyId}',this)">
+        <span>${s.title}</span><span class="dm-chev">▼</span>
+      </div>
+      ${body}
+    </div>`;
+  }).join('');
+}
+
+function toggleDmSection(id, hd) {
+  const body = document.getElementById(id);
+  const open = !body.classList.contains('hidden');
+  body.classList.toggle('hidden', open);
+  hd.classList.toggle('collapsed', open);
+}
+
+function copyRaw(btn) {
+  const raw = btn.parentElement.textContent.replace('⎘ COPIER', '').trim();
+  navigator.clipboard.writeText(raw).then(() => {
+    btn.textContent = '✓ COPIÉ';
+    setTimeout(() => btn.textContent = '⎘ COPIER', 1500);
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function closeDroneModal() {
+  document.getElementById('drone-modal').classList.remove('open');
+  selectedDroneId = null;
+  document.querySelectorAll('.drone-item').forEach(el => el.classList.remove('selected'));
+}
+
+function centerOnMe() {
+  if (!navigator.geolocation) { alert('Géolocalisation non disponible'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    if (!leafMap) return;
+    if (!leafUser) {
+      leafUser = L.circleMarker([lat, lon], {
+        radius: 7, color: '#166534', fillColor: '#22c55e', fillOpacity: 0.85, weight: 2
+      }).addTo(leafMap).bindPopup('Vous');
+    } else {
+      leafUser.setLatLng([lat, lon]);
+    }
+    leafMap.setView([lat, lon], 15);
+  }, () => alert('Géolocalisation refusée'));
+}
+
+// Drag modal — différé après chargement DOM
+document.addEventListener('DOMContentLoaded', function() {
+  const modal  = document.getElementById('drone-modal');
+  const header = document.getElementById('dm-header');
+  if (!modal || !header) return;
+  let drag = false, ox = 0, oy = 0;
+  header.addEventListener('mousedown', e => {
+    drag = true; ox = e.clientX - modal.offsetLeft; oy = e.clientY - modal.offsetTop;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    modal.style.left = Math.max(0, e.clientX - ox) + 'px';
+    modal.style.top  = Math.max(0, e.clientY - oy) + 'px';
+  });
+  document.addEventListener('mouseup', () => drag = false);
+});
+
+// ════════════════════════════════════════════════════════════
+
+function handleBoot(payload) {
+  // payload ex: "RSSI_BASELINE=45,STEP=2,CHANNELS=151,SCALE=30,210,CAL=12,-5,3,..."
+  const params = {};
+
+  // Extraire CAL=... (8 valeurs signées) avant le split global
+  const calMatch = payload.match(/CAL=([-\d,]+)/);
+  if (calMatch) payload = payload.replace(calMatch[0], '');
+
+  // Extraire RANGE=min,max avant le split
+  const rangeMatch = payload.match(/RANGE=(\d+),(\d+)/);
+  if (rangeMatch) payload = payload.replace(rangeMatch[0], '');
+
+  // Extraire SCALE=min,max avant le split
+  const scaleMatch = payload.match(/SCALE=(\d+),(\d+)/);
+  if (scaleMatch) payload = payload.replace(scaleMatch[0], '');
+
+  for (const part of payload.split(',')) {
+    const eq = part.indexOf('=');
+    if (eq > 0) params[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  }
+
+  // Restauration de la plage de sweep
+  if (rangeMatch) {
+    const rMin = parseInt(rangeMatch[1]);
+    const rMax = parseInt(rangeMatch[2]);
+    if (!isNaN(rMin) && !isNaN(rMax) && rMax > rMin) {
+      sliderFMin = rMin; sliderFMax = rMax;
+      dispFMin   = rMin; dispFMax   = rMax;
+      // Mettre à jour les handles visuels
+      const pct = f => (f - FMIN) / (FMAX - FMIN) * 100;
+      const hL = document.getElementById('freq-handle-l');
+      const hR = document.getElementById('freq-handle-r');
+      const fl = document.getElementById('freq-fill');
+      if (hL) { hL.style.left = pct(rMin) + '%'; hL.textContent = rMin; }
+      if (hR) { hR.style.left = pct(rMax) + '%'; hR.textContent = rMax; }
+      if (fl) { fl.style.left = pct(rMin) + '%'; fl.style.width = (pct(rMax) - pct(rMin)) + '%'; }
+      showDiag(`Plage sweep restaurée : ${rMin}–${rMax} MHz`);
+    }
+  }
+
+  // Restauration du scale sauvegardé
+  if (scaleMatch) {
+    const mn = parseInt(scaleMatch[1]);
+    const mx = parseInt(scaleMatch[2]);
+    if (!isNaN(mn) && !isNaN(mx) && mx > mn) {
+      autoScale = false;
+      scaleMin = mn; scaleMax = mx;
+      dispMin  = mn; dispMax  = mx;
+      document.getElementById('btn-scale').classList.remove('on');
+      showDiag(`Scale restauré depuis Arduino : ${mn} – ${mx}`);
+    }
+  }
+
+  // Restauration de la calibration
+  if (calMatch) {
+    const vals = calMatch[1].split(',').map(Number);
+    if (vals.length === 8) {
+      calOffsets.clear();
+      calMeasured = vals.map((off, i) => {
+        calOffsets.set(CAL_FREQS[i], off);
+        return 0; // valeur brute inconnue, on met 0
+      });
+      calActive = true;
+      document.getElementById('btn-cal-toggle').classList.add('on');
+      document.getElementById('btn-cal-toggle').title = 'Calibration active (restaurée depuis Arduino)';
+      showDiag('Calibration restaurée depuis Arduino');
+    }
+  }
+
+  const baseline = params.RSSI_BASELINE || '—';
+  const step     = params.STEP || '—';
+  let msg = `Boot OK · baseline RSSI = ${baseline} · step = ${step} MHz`;
+  if (baseline < 10) msg += ' ⚠ RSSI très bas — vérifier câblage';
+  showDiag(msg);
+
+  // Sync bouton step
+  const stepVal = parseInt(step);
+  if (!isNaN(stepVal)) {
+    document.querySelectorAll('.btn-step').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.step) === stepVal);
+    });
+    document.getElementById('lbl-step-info').textContent = STEP_INFO[stepVal] || '';
+  }
+}
+
+function showDiag(txt) { /* supprimé */ }
+
+function handleDiag(payload) {
+  // payload : "5658=45,5695=48,5732=210,..."
+  const pairs = payload.split(',');
+  let out = 'DIAG → ';
+  let maxVal = 0, maxFreq = 0;
+  for (const p of pairs) {
+    const [f, v] = p.split('=');
+    const val = parseInt(v);
+    out += f + ':' + v + '  ';
+    if (val > maxVal) { maxVal = val; maxFreq = parseInt(f); }
+  }
+  out += `| MAX=${maxVal} @ ${maxFreq}MHz`;
+  if (maxVal < 20) out += ' ⚠ Valeurs très basses — vérifie câblage RSSI (A0)';
+  else if (maxVal < 60) out += ' ✓ Module répond (pas de signal fort à proximité)';
+  else out += ' ✓ Signal détecté !';
+  showDiag(out);
+}
+
+// ════════════════════════════════════════════════════════
+//  CONTRÔLES
+// ════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════
+//  MODE FOCUS
+// ════════════════════════════════════════════════════════
+
+let focusMode = false;
+let daylight  = true;
+const markerFreqs = new Set();   // fréquences marquées en mode scan
+
+// ── Calibration ────────────────────────────────────────────
+const CAL_FREQS   = [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917];
+const CAL_SWEEPS  = 10;
+let calState      = 'idle';  // 'idle' | 'measuring' | 'done'
+let calSweepsDone = 0;
+let calAccum      = new Map();   // freq → somme des lectures
+let calResult     = new Map();   // freq → moyenne finale
+let calOffsets    = new Map();   // freq → offset additif (correction)
+let calActive     = false;
+let calPrevFocusMode     = false;
+let calPrevFocusSelected = new Set();
+let showIM3   = true;
+let showIM5   = true;
+const focusSelected = new Set([5658, 5732, 5843, 5880]);  // R1, R3, R6, R7 par défaut
+
+// ── Intermodulation Distortion (IMD) ─────────────────────
+let imdCache = [];  // [{freq, order}] — recalculé à chaque changement de sélection
+
+function computeIMD() {
+  imdCache = [];
+  if (focusSelected.size < 2) return;
+  const freqs = [...focusSelected].sort((a, b) => a - b);
+  const n = freqs.length;
+  const result = new Map();  // freq → ordre minimal
+
+  const add = (f, order) => {
+    f = Math.round(f);
+    if (f < FMIN || f > FMAX) return;
+    const cur = result.get(f);
+    if (!cur || order < cur) result.set(f, order);
+  };
+
+  for (let a = 0; a < n; a++) {
+    for (let b = 0; b < n; b++) {
+      if (a === b) continue;
+      add(2 * freqs[a] - freqs[b],         3);  // IM3 two-tone
+      add(3 * freqs[a] - 2 * freqs[b],     5);  // IM5 two-tone
+    }
+  }
+  // IM3 three-tone : fa + fb − fc
+  for (let a = 0; a < n; a++)
+    for (let b = a + 1; b < n; b++)
+      for (let c = 0; c < n; c++) {
+        if (c === a || c === b) continue;
+        add(freqs[a] + freqs[b] - freqs[c], 3);
+      }
+
+  imdCache = [...result.entries()].map(([freq, order]) => ({ freq, order }));
+}
+
+// Appel initial (sélection par défaut)
+computeIMD();
+
+async function sendFocusCommand() {
+  if (!writer) return;
+  data = []; dataMap.clear(); currentScanFreq = -1;
+  ignoreData = true;
+  if (focusSelected.size === 0) {
+    await writer.write('FOCUS:OFF\n');
+    imdCache = [];
+    return;
+  }
+  // Bitmask : 1 byte par bande, bit N = canal N (index dans b.freqs)
+  let hex = '';
+  for (const b of BAND_DEFS) {
+    let mask = 0;
+    for (let i = 0; i < b.freqs.length; i++) {
+      if (focusSelected.has(b.freqs[i])) mask |= (1 << i);
+    }
+    hex += mask.toString(16).padStart(2, '0').toUpperCase();
+  }
+  await writer.write(`FOCUS:${hex}\n`);
+  updateFocusZoom();
+  computeIMD();
+}
+
+// ── Presets Focus ──────────────────────────────────────────
+const PRESETS = {
+  R1367: [5658, 5732, 5843, 5880],
+  IMD5C: [5658, 5695, 5760, 5800, 5880],
+  IMD6C: [5658, 5695, 5760, 5800, 5843, 5880],
+};
+
+function updatePresetHighlight() {
+  const active = [...focusSelected].sort((a,b)=>a-b).join(',');
+  document.querySelectorAll('.btn-preset').forEach(btn => {
+    const pfreqs = PRESETS[btn.dataset.preset].slice().sort((a,b)=>a-b).join(',');
+    btn.classList.toggle('active', active === pfreqs);
+  });
+}
+
+document.querySelectorAll('.btn-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    focusSelected.clear();
+    PRESETS[btn.dataset.preset].forEach(f => focusSelected.add(f));
+    updatePresetHighlight();
+    sendFocusCommand();
+  });
+});
+
+function setFocusOnlyVisible(visible) {
+  document.querySelectorAll('.focus-only').forEach(el => {
+    el.style.display = visible ? '' : 'none';
+  });
+}
+
+document.getElementById('btn-focus').addEventListener('click', () => {
+  focusMode = !focusMode;
+  if (focusMode) markerFreqs.clear();  // on quitte le scan, on efface les marqueurs
+  document.getElementById('btn-focus').classList.toggle('on', focusMode);
+  setFocusOnlyVisible(focusMode);
+  document.querySelectorAll('.btn-step').forEach(b => {
+    b.style.opacity = focusMode ? '0.3' : '';
+    b.style.pointerEvents = focusMode ? 'none' : '';
+  });
+  if (focusMode) {
+    // Reprend la sélection mémorisée — si existante on l'envoie immédiatement
+    updatePresetHighlight();
+    if (focusSelected.size > 0) {
+      sendFocusCommand();
+      showDiag(`Mode Focus — ${focusSelected.size} channel(s) actifs — cliquer sur la band map pour modifier`);
+    } else {
+      showDiag('Mode Focus — cliquer sur les channels dans la band map pour les sélectionner');
+    }
+  } else {
+    // La sélection est conservée pour la prochaine fois
+    updateFocusZoom();  // reset zoom
+    imdCache = [];
+    if (writer) writer.write('FOCUS:OFF\n').catch(() => {});
+    showDiag('Mode Focus désactivé — sélection conservée');
+  }
+});
+
+const STEP_INFO = {
+  1: '301 canaux · ~7.5s/sweep',
+  2: '151 canaux · ~3.8s/sweep',
+  5: ' 61 canaux · ~1.5s/sweep',
+};
+
+let liveVisible = true;   // false = mode OFF, courbe live masquée
+
+document.querySelectorAll('.btn-step').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (focusMode) return;
+    document.querySelectorAll('.btn-step').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const step = parseInt(btn.dataset.step);
+    if (step === 0) {
+      // Mode OFF : masquer courbe live, pas d'envoi de commande
+      liveVisible = false;
+      document.getElementById('lbl-step-info').textContent = 'Courbe live masquée';
+    } else {
+      liveVisible = true;
+      document.getElementById('lbl-step-info').textContent = STEP_INFO[step] || '';
+      data = []; dataMap.clear(); currentScanFreq = -1;
+      ignoreData = true;
+      sendStep(step);
+    }
+  });
+});
+
+document.querySelectorAll('.btn-band').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const idx = parseInt(btn.dataset.band);
+    bandVisible[idx] = !bandVisible[idx];
+    btn.classList.toggle('hidden-band', !bandVisible[idx]);
+    // En mode Focus : masquer une bande retire ses channels de la sélection
+    if (focusMode && !bandVisible[idx]) {
+      const b = BAND_DEFS[idx];
+      let changed = false;
+      for (const freq of b.freqs) {
+        if (focusSelected.has(freq)) { focusSelected.delete(freq); changed = true; }
+      }
+      if (changed) { updatePresetHighlight(); sendFocusCommand(); }
+    }
+  });
+});
+
+document.getElementById('btn-im3').addEventListener('click', () => {
+  showIM3 = !showIM3;
+  document.getElementById('btn-im3').classList.toggle('on', showIM3);
+});
+document.getElementById('btn-im5').addEventListener('click', () => {
+  showIM5 = !showIM5;
+  document.getElementById('btn-im5').classList.toggle('on', showIM5);
+});
+
+document.getElementById('btn-peak').addEventListener('click', () => {
+  peakOn = !peakOn;
+  document.getElementById('btn-peak').classList.toggle('on', peakOn);
+  if (!peakOn) data.forEach(d => d.peak = d.cur);
+});
+
+document.getElementById('btn-scale').addEventListener('click', () => {
+  autoScale = !autoScale;
+  document.getElementById('btn-scale').classList.toggle('on', autoScale);
+  if (!autoScale) {
+    // Freeze les valeurs affichées actuellement — pas de reset à 0-1023
+    scaleMin = dispMin;
+    scaleMax = dispMax;
+    // Sauvegarde sur l'Arduino (EEPROM)
+    const mn = Math.round(dispMin);
+    const mx = Math.round(dispMax);
+    sendScale(mn, mx);
+    showDiag(`Scale fixé à ${mn} – ${mx} · sauvegardé sur l'Arduino`);
+  }
+});
+
+document.getElementById('btn-diag').addEventListener('click', () => {
+  sendDiag();
+  setStatus('connected', 'Diagnostic en cours…');
+});
+
+document.getElementById('btn-day').addEventListener('click', () => {
+  daylight = !daylight;
+  document.body.classList.toggle('daylight', daylight);
+  document.getElementById('btn-day').classList.toggle('on', daylight);
+});
+
+document.getElementById('btn-buzzer-web').addEventListener('click', toggleBuzzerWeb);
+
+// ════════════════════════════════════════════════════════
+//  PARSING
+// ════════════════════════════════════════════════════════
+
+// Pré-calcul : table freq → {band, label du canal}
+// Pour les fréquences exactes de canaux connus
+const CHAN_MAP = {};  // freq → {band, label}
+for (const b of BAND_DEFS) {
+  for (let i = 0; i < b.freqs.length; i++) {
+    const f = b.freqs[i];
+    const num = b.chanNums ? b.chanNums[i] : i + 1;
+    if (!CHAN_MAP[f]) CHAN_MAP[f] = { band: b, label: b.short + num };
+  }
+}
+
+// Streaming point-par-point
+const dataMap     = new Map();   // freq → entrée data (lookup O(1))
+let   currentScanFreq = -1;
+let   ignoreData      = false;   // true entre sendFocusCommand/sendStep et ACK reçu
+
+function parseLine(line) {
+  if (!line || line.startsWith('ACK') || line.startsWith('BOOT')) return;
+  if (ignoreData) return;
+
+  // ── Fin du sweep ─────────────────────────────────────────
+  if (line === 'EOS') {
+    // Garantir l'ordre fréquentiel — si la connexion s'est faite en milieu de sweep,
+    // les premiers points reçus peuvent être à la fin du sweep (ex: 5890..5905, puis 5645..5885)
+    // ce qui crée une droite parasite dans la bezier. On trie une fois à chaque EOS.
+    if (data.length > 1) data.sort((a, b) => a.freq - b.freq);
+    // Collecte calibration
+    if (calState === 'measuring') {
+      const targetFreq = CAL_FREQS[calStep];
+      const d = data.find(p => p.freq === targetFreq);
+      if (d) {
+        calSweepsDone++;
+        calAccum.set(targetFreq, (calAccum.get(targetFreq) || 0) + d.cur);
+        calUpdateProgress();
+        if (calSweepsDone >= CAL_SWEEPS) { calState = 'idle'; calFinishStep(); }
+      }
+    }
+    const now = performance.now();
+    if (lastSweepTime > 0) sweepDuration = now - lastSweepTime;
+    lastSweepTime = now;
+    frameCount++;
+    if (now - lastFpsTime >= 1000) {
+      fps = frameCount; frameCount = 0; lastFpsTime = now;
+      document.getElementById('sv-fps').textContent = fps;
+    }
+    updateStats();
+    return;
+  }
+
+  // ── Point individuel "freq:rssi" ─────────────────────────
+  const colon = line.indexOf(':');
+  if (colon < 0) return;
+  const freq = parseInt(line.substring(0, colon));
+  const rssi = parseInt(line.substring(colon + 1));
+  if (isNaN(freq) || isNaN(rssi)) return;
+
+  currentScanFreq = freq;
+  const now = performance.now();
+
+  let d = dataMap.get(freq);
+  // Correction calibration (offset additif par fréquence)
+  const calCorr = calActive ? Math.round(getCalOffset(freq)) : 0;
+  if (d) {
+    // Moyenne glissante sur 3 sweeps en mode focus
+    if (focusMode) {
+      if (!d.samples) d.samples = [];
+      d.samples.push(rssi);
+      if (d.samples.length > 3) d.samples.shift();
+      d.cur = Math.round(d.samples.reduce((a, b) => a + b, 0) / d.samples.length) + calCorr;
+    } else {
+      d.cur = rssi + calCorr;
+      d.samples = undefined;
+    }
+    if (d.cur >= d.peak) {
+      d.peak = d.cur; d.decayAt = now;
+    } else if (!peakOn || now - d.decayAt > PEAK_HOLD_MS) {
+      d.peak = d.cur;
+    }
+  } else {
+    // Nouvelle fréquence — ajout immédiat (premier sweep ou changement de step)
+    const cm = CHAN_MAP[freq];
+    d = { freq, cur: rssi, disp: rssi, peak: rssi, decayAt: now,
+          samples: focusMode ? [rssi] : undefined,
+          band: cm ? cm.band : getBand(freq), label: cm ? cm.label : null };
+    data.push(d);
+    dataMap.set(freq, d);
+    document.getElementById('sv-ch').textContent = data.length;
+  }
+}
+
+function updateStats() {
+  let pv = -1, pi = 0, mn = 9999, mx = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].peak > pv) { pv = data[i].peak; pi = i; }
+    if (data[i].cur < mn) mn = data[i].cur;
+    if (data[i].cur > mx) mx = data[i].cur;
+  }
+  if (!data.length) return;
+  const pl = data[pi].label ? ' (' + data[pi].label + ')' : '';
+  document.getElementById('sv-pf').textContent  = data[pi].freq + ' MHz' + pl;
+  document.getElementById('sv-pr').textContent  = pv + ' (' + pct(pv) + '%)';
+  document.getElementById('sv-range').textContent = mn + ' – ' + mx;
+  if (autoScale) {
+    scaleMin = Math.max(0, mn - 5);
+    scaleMax = Math.min(1023, mx + SCALE_MARGIN);
+    if (scaleMax - scaleMin < 150) scaleMax = scaleMin + 150;
+  }
+}
+
+function pct(v) { return Math.round(v / 1023 * 100); }
+
+// ════════════════════════════════════════════════════════
+//  CANVAS
+// ════════════════════════════════════════════════════════
+
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+// Band map en BAS du spectre
+const BAND_ROW_H   = 30;          // hauteur d'une rangée de bande
+const BAND_MAP_GAP = 38;          // espace sous baseY avant la band map (axe X)
+const PAD = {
+  top:   26,
+  right: 24,
+  left:  54,
+  // bottom dynamique : s'adapte au nombre de bandes visibles
+  get bottom() {
+    const n = bandVisible.filter(Boolean).length;
+    return BAND_MAP_GAP + n * BAND_ROW_H + 6;
+  }
+};
+
+// Y de début de la band map (calculé depuis le bas du canvas)
+function bandMapTop() { return cv.height - PAD.bottom + BAND_MAP_GAP; }
+function activeBandRowH() { return BAND_ROW_H; }
+
+// Mappe une ligne visuelle compacte (0-based) → index réel dans BAND_DEFS
+function visRowToBandIdx(visRow) {
+  let count = 0;
+  for (let i = 0; i < BAND_DEFS.length; i++) {
+    if (!bandVisible[i]) continue;
+    if (count === visRow) return i;
+    count++;
+  }
+  return -1;
+}
+
+function resize() {
+  const w = document.getElementById('wrap');
+  cv.width  = w.clientWidth;
+  cv.height = w.clientHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Plage d'affichage X — contrôlée par les curseurs de fréquence
+let sliderFMin = FMIN, sliderFMax = FMAX;
+let dispFMin = FMIN, dispFMax = FMAX;
+
+function f2x(freq) {
+  const plotW = cv.width - PAD.left - PAD.right;
+  return PAD.left + (freq - dispFMin) / (dispFMax - dispFMin) * plotW;
+}
+
+function updateFocusZoom() {
+  dispFMin = FMIN; dispFMax = FMAX;
+}
+function r2y(rssi) {
+  const plotH = cv.height - PAD.top - PAD.bottom;
+  const clamped = Math.max(dispMin, Math.min(dispMax, rssi));
+  return PAD.top + plotH - (clamped - dispMin) / (dispMax - dispMin) * plotH;
+}
+
+// ── Boucle de rendu ──────────────────────────────────────
+
+function draw() {
+  const W = cv.width, H = cv.height;
+  const plotH = H - PAD.top - PAD.bottom;
+  const plotW = W - PAD.left - PAD.right;
+  const baseY = PAD.top + plotH;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = daylight ? '#e8eaf0' : '#080810';
+  ctx.fillRect(0, 0, W, H);
+
+  drawBandMap(baseY);
+
+  // Lissage asymétrique : expansion rapide (nouveau signal), contraction lente (signal disparu)
+  // → empêche le bruit de fond de remplir l'écran au démarrage
+  dispMin += (scaleMin - dispMin) * (scaleMin < dispMin ? 0.08 : 0.015);
+  dispMax += (scaleMax - dispMax) * (scaleMax > dispMax ? 0.08 : 0.015);
+  document.getElementById('sv-scale').textContent =
+    Math.round(dispMin) + '–' + Math.round(dispMax);
+
+  ctx.fillStyle = daylight ? '#f4f4fc' : '#07070f';
+  ctx.fillRect(PAD.left, PAD.top, plotW, plotH);
+
+  drawGrid(plotW, plotH, baseY);
+
+  if (data.length === 0) {
+    ctx.font = '12px Courier New'; ctx.textAlign = 'center'; ctx.fillStyle = '#1a1a2a';
+    ctx.fillText('En attente de données Arduino…', W / 2, PAD.top + plotH / 2);
+    requestAnimationFrame(draw); return;
+  }
+
+  // Lissage inter-frames : chaque point glisse vers sa valeur cible
+  const SMOOTH = 0.18;
+  for (const d of data) d.disp += (d.cur - d.disp) * SMOOTH;
+
+  drawScanBar(baseY);
+  drawMarkers(baseY);
+  drawCalCurve(plotH, baseY);
+  drawCaptures(plotH, baseY);
+  if (liveVisible) {
+    drawSpectrum(plotH, baseY);
+    if (peakOn && !focusMode) drawPeak(baseY);
+    if (focusMode && (showIM3 || showIM5)) drawIMD(plotH, baseY);
+  }
+  drawXAxis(plotH, baseY);
+  drawYAxis(plotH);
+  drawRangeLines(plotH, baseY);
+
+  requestAnimationFrame(draw);
+}
+
+// ── Lignes de plage (sliders fMin / fMax) ─────────────────
+function drawRangeLines(plotH, baseY) {
+  const lines = [
+    { freq: sliderFMin, side: 'l' },
+    { freq: sliderFMax, side: 'r' }
+  ];
+  ctx.save();
+  for (const { freq, side } of lines) {
+    const x = f2x(freq);
+    if (x < PAD.left || x > PAD.left + (cv.width - PAD.left - PAD.right)) continue;
+    ctx.strokeStyle = daylight ? 'rgba(26,95,180,0.55)' : 'rgba(96,165,250,0.6)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, PAD.top);
+    ctx.lineTo(x, baseY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Label fréquence
+    const label = freq + '';
+    ctx.font = 'bold 9px Courier New';
+    const tw = ctx.measureText(label).width;
+    const lx = side === 'l' ? x + 3 : x - tw - 3;
+    ctx.fillStyle = daylight ? 'rgba(26,95,180,0.8)' : 'rgba(96,165,250,0.85)';
+    ctx.fillText(label, lx, PAD.top + 10);
+  }
+  ctx.restore();
+}
+
+// ── Interaction Focus sur la band map ───────────────────
+
+cv.addEventListener('click', (e) => {
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const bmY = bandMapTop();
+  const nVis = bandVisible.filter(Boolean).length;
+  if (my < bmY || my >= bmY + nVis * activeBandRowH()) return;
+
+  const visRow = Math.floor((my - bmY) / activeBandRowH());
+  const bandIdx = visRowToBandIdx(visRow);
+  if (bandIdx < 0) return;
+
+  const b = BAND_DEFS[bandIdx];
+  let closestFreq = null, closestDist = Infinity;
+  for (const freq of b.freqs) {
+    const dist = Math.abs(mx - bmf2x(freq));
+    if (dist < closestDist) { closestDist = dist; closestFreq = freq; }
+  }
+  if (closestFreq === null || closestDist >= 20) return;
+
+  if (focusMode) {
+    if (focusSelected.has(closestFreq)) focusSelected.delete(closestFreq);
+    else focusSelected.add(closestFreq);
+    updatePresetHighlight();
+    sendFocusCommand();
+  } else {
+    // Mode scan : toggle marqueur vertical
+    if (markerFreqs.has(closestFreq)) markerFreqs.delete(closestFreq);
+    else markerFreqs.add(closestFreq);
+  }
+});
+
+cv.addEventListener('mousemove', (e) => {
+  const rect = cv.getBoundingClientRect();
+  const my = e.clientY - rect.top;
+  const bmY = bandMapTop();
+  const nVis = bandVisible.filter(Boolean).length;
+  cv.style.cursor = (my >= bmY && my < bmY + nVis * activeBandRowH()) ? 'pointer' : '';
+});
+
+// ── Band Map ─────────────────────────────────────────────
+// La band map utilise toujours la plage complète FMIN-FMAX (pas de zoom)
+// Le spectre en dessous peut être zoomé en mode Focus
+
+function bmf2x(freq) {
+  const plotW = cv.width - PAD.left - PAD.right;
+  return PAD.left + (freq - FMIN) / (FMAX - FMIN) * plotW;
+}
+
+// Courbe de correction calibration (trait fin sur le spectre)
+function drawCalCurve(plotH, baseY) {
+  if (!calActive || calOffsets.size < 2) return;
+  // Trouver un niveau de référence visible : milieu de l'échelle affichée
+  const refRssi = (dispMin + dispMax) / 2;
+  ctx.save();
+  ctx.strokeStyle = daylight ? 'rgba(0,100,200,0.35)' : 'rgba(80,160,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 6]);
+  ctx.beginPath();
+  const step = 2; // MHz
+  let first = true;
+  for (let f = FMIN; f <= FMAX; f += step) {
+    const off = getCalOffset(f);
+    // Afficher la courbe à hauteur refRssi + off (montre la forme de la correction)
+    const y = r2y(refRssi + off);
+    const x = f2x(f);
+    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Points aux canaux R mesurés
+  for (let i = 0; i < 8; i++) {
+    if (calMeasured[i] === null) continue;
+    const x = f2x(CAL_FREQS[i]);
+    const y = r2y(refRssi + (calOffsets.get(CAL_FREQS[i]) || 0));
+    ctx.fillStyle = 'rgba(80,160,255,0.7)';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawMarkers(baseY) {
+  if (focusMode || markerFreqs.size === 0) return;
+  ctx.save();
+  for (const freq of markerFreqs) {
+    const x = f2x(freq);
+    if (x < PAD.left || x > cv.width - PAD.right) continue;
+    const cm = CHAN_MAP[freq];
+    const color = cm ? cm.band.color : '#ffffff';
+    const rgb = hexRgb(color);
+    ctx.strokeStyle = `rgba(${rgb},0.75)`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, PAD.top + 44);
+    ctx.lineTo(x, baseY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = 'bold 36px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color;
+    ctx.shadowColor = color; ctx.shadowBlur = 6;
+    const label = cm ? cm.label : freq + 'M';
+    ctx.fillText(label, x, PAD.top + 38);
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+}
+
+function drawScanBar(baseY) {
+  if (focusMode) return;
+  if (currentScanFreq < 0 || data.length === 0) return;
+  const x = f2x(currentScanFreq);
+  if (x < PAD.left || x > cv.width - PAD.right) return;
+
+  ctx.save();
+  ctx.strokeStyle = daylight ? 'rgba(100,80,0,0.5)' : 'rgba(255,255,180,0.35)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x, PAD.top);
+  ctx.lineTo(x, baseY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Petit triangle en haut
+  ctx.fillStyle = daylight ? 'rgba(100,80,0,0.7)' : 'rgba(255,255,180,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(x - 4, PAD.top);
+  ctx.lineTo(x + 4, PAD.top);
+  ctx.lineTo(x, PAD.top + 7);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBandMap(baseY) {
+  const bmY = bandMapTop();
+
+  // Séparateur au-dessus de la band map
+  ctx.strokeStyle = '#1a1a30';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD.left, bmY - 2);
+  ctx.lineTo(cv.width - PAD.right, bmY - 2);
+  ctx.stroke();
+
+  ctx.save();
+  let visRow = 0;
+  BAND_DEFS.forEach((b, row) => {
+    if (!bandVisible[row]) return;   // bande masquée → rangée complètement invisible
+
+    const BOX_HALF = 25; // BOX_W / 2
+    const x1  = Math.max(PAD.left,              bmf2x(b.fMin) - BOX_HALF);
+    const x2  = Math.min(cv.width - PAD.right,  bmf2x(b.fMax) + BOX_HALF);
+    const BRH = activeBandRowH();
+    const y   = bmY + visRow * BRH;   // rangées compactes, sans trou
+    visRow++;
+    const rh  = BRH - 2;
+    const rgb = hexRgb(b.color);
+
+    const hasSel = focusMode && b.freqs.some(f => focusSelected.has(f));
+    const alpha  = focusMode ? (hasSel ? 1 : 0.25) : 1;
+
+    // Fond de la rangée
+    ctx.fillStyle = `rgba(${rgb},${0.18 * alpha})`;
+    ctx.fillRect(x1, y, x2 - x1, rh);
+
+    // Bord supérieur
+    ctx.strokeStyle = `rgba(${rgb},${0.7 * alpha})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+
+    // Bords latéraux
+    ctx.strokeStyle = `rgba(${rgb},${0.35 * alpha})`;
+    ctx.beginPath();
+    ctx.moveTo(x1, y); ctx.lineTo(x1, y + rh);
+    ctx.moveTo(x2, y); ctx.lineTo(x2, y + rh);
+    ctx.stroke();
+
+    // ── Carreaux (normal et focus) — même sémantique, taille différente ──
+    const BOX_W = BOX_HALF * 2;  // 50px
+    const BOX_H = rh - 2;
+    for (let i = 0; i < b.freqs.length; i++) {
+      const freq = b.freqs[i];
+      const cx   = bmf2x(freq);
+      const bx   = cx - BOX_W / 2;
+      const by   = y + 1;
+      const sel  = focusSelected.has(freq);
+
+      // Normal : tous colorés. Focus : coloré si sélectionné, gris si non.
+      const active = !focusMode || sel;
+      ctx.fillStyle   = active ? `rgba(${rgb},0.55)` : (daylight ? 'rgba(180,188,204,0.35)' : 'rgba(12,12,18,0.9)');
+      ctx.strokeStyle = active ? b.color : (daylight ? '#b0b8cc' : '#252530');
+      ctx.lineWidth   = active ? 1.5 : 1;
+      ctx.fillRect(bx, by, BOX_W, BOX_H);
+      ctx.strokeRect(bx, by, BOX_W, BOX_H);
+
+      ctx.font      = 'bold 10px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = active ? '#fff' : (daylight ? '#8898b0' : '#383848');
+      if (active) { ctx.shadowColor = b.color; ctx.shadowBlur = 4; }
+      const chanLabel = b.short + (b.chanNums ? b.chanNums[i] : i + 1);
+      ctx.fillText(chanLabel, cx, by + BOX_H / 2 + 4);
+      ctx.shadowBlur = 0;
+    }
+  });
+
+  // Indication mode Focus / marqueurs
+  ctx.font = '7px Courier New';
+  ctx.textAlign = 'left';
+  if (focusMode) {
+    ctx.fillStyle = 'rgba(255,220,0,0.45)';
+    ctx.fillText('⊙ clic pour sélectionner', PAD.left, bmY - 5);
+  } else {
+    ctx.fillStyle = daylight ? 'rgba(80,80,160,0.5)' : 'rgba(120,120,200,0.35)';
+    ctx.fillText('◎ clic pour marqueur', PAD.left, bmY - 5);
+  }
+
+  ctx.restore();
+}
+
+// ── Grille ────────────────────────────────────────────────
+
+function drawGrid(plotW, plotH, baseY) {
+  ctx.lineWidth = 1;
+  const LEVELS = [0, 256, 512, 768, 1023];
+  for (const v of LEVELS) {
+    const y = r2y(v);
+    ctx.strokeStyle = daylight ? (v === 0 ? '#c0c4d8' : '#d4d8e8') : (v === 0 ? '#1a1a32' : '#0e0e22');
+    ctx.setLineDash(v === 0 ? [] : [4, 6]);
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + plotW, y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const VTICKS = [5660,5700,5740,5780,5820,5860,5900,5940];
+  for (const f of VTICKS) {
+    if (f <= dispFMin || f >= dispFMax) continue;
+    ctx.strokeStyle = daylight ? '#d0d4e4' : '#0e0e22'; ctx.setLineDash([2, 8]);
+    ctx.beginPath(); ctx.moveTo(f2x(f), PAD.top); ctx.lineTo(f2x(f), baseY); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.strokeStyle = daylight ? '#b0b4c8' : '#1a1a30';
+  ctx.strokeRect(PAD.left, PAD.top, plotW, plotH);
+}
+
+// ── Spectre ───────────────────────────────────────────────
+
+function drawSpectrum(plotH, baseY) {
+  if (focusMode) { drawFocusBars(plotH, baseY); return; }
+  if (data.length < 2) return;
+  const pts = data
+    .slice().sort((a, b) => a.freq - b.freq)
+    .map(d => ({ x: f2x(d.freq), y: r2y(d.disp) }));
+
+  ctx.save();
+  ctx.beginPath(); smoothPath(pts);
+  ctx.strokeStyle = daylight ? '#008844' : '#00ff88'; ctx.lineWidth = 1.5;
+  ctx.shadowColor = daylight ? '#008844' : '#00ff88'; ctx.shadowBlur = daylight ? 0 : 6;
+  ctx.stroke();
+  ctx.restore();
+
+  // Points de canaux connus (visibles si peu de points, ou si canal de bande visible)
+  for (const d of data) {
+    if (!d.label) continue;
+    const bandIdx = BAND_DEFS.indexOf(d.band);
+    if (bandIdx >= 0 && !bandVisible[bandIdx]) continue;
+    if (data.length > 80 && !d.label) continue;
+    const x = f2x(d.freq), y = r2y(d.disp);
+    const rgb = hexRgb(d.band ? d.band.color : '#0f8');
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${rgb},0.9)`;
+    ctx.fill();
+  }
+}
+
+// ── Barres Focus ─────────────────────────────────────────
+
+function drawFocusBars(plotH, baseY) {
+  if (data.length === 0) return;
+  const plotW  = cv.width - PAD.left - PAD.right;
+  // Largeur de barre : au plus 80px, au moins 20px
+  const barW   = Math.min(80, Math.max(20, plotW / (data.length + 1) * 0.7));
+
+  for (const d of data) {
+    // Respecter la visibilité de bande
+    if (d.band) {
+      const bi = BAND_DEFS.indexOf(d.band);
+      if (bi >= 0 && !bandVisible[bi]) continue;
+    }
+    const x    = f2x(d.freq);
+    const y    = r2y(d.disp);
+    const col  = d.band ? d.band.color : '#00ff88';
+    const rgb  = hexRgb(col);
+
+    // Barre remplie avec dégradé
+    const grad = ctx.createLinearGradient(0, y, 0, baseY);
+    grad.addColorStop(0,   `rgba(${rgb},0.85)`);
+    grad.addColorStop(0.6, `rgba(${rgb},0.35)`);
+    grad.addColorStop(1,   `rgba(${rgb},0.08)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - barW / 2, y, barW, baseY - y);
+
+    // Contour lumineux
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = 1.5;
+    ctx.shadowColor = col; ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(x - barW / 2, baseY);
+    ctx.lineTo(x - barW / 2, y);
+    ctx.lineTo(x + barW / 2, y);
+    ctx.lineTo(x + barW / 2, baseY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Label channel au-dessus de la barre
+    if (d.label) {
+      ctx.font      = 'bold 11px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = col;
+      ctx.shadowColor = col; ctx.shadowBlur = 4;
+      ctx.fillText(d.label, x, y - 18);
+      ctx.shadowBlur = 0;
+    }
+    // Fréquence
+    ctx.font      = '8px Courier New';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText(d.freq + ' MHz', x, y - 7);
+
+    // Valeur RSSI sous la barre
+    ctx.font      = '10px Courier New';
+    ctx.fillStyle = `rgba(${rgb},0.9)`;
+    ctx.fillText(d.cur, x, baseY + 14);
+  }
+}
+
+// ── IMD (Intermodulation Distortion) ─────────────────────
+
+function drawIMD(plotH, baseY) {
+  if (imdCache.length === 0) return;
+  ctx.save();
+  for (const { freq, order } of imdCache) {
+    const isIM3 = order === 3;
+    if (isIM3 && !showIM3) continue;
+    if (!isIM3 && !showIM5) continue;
+
+    const x = f2x(freq);
+    if (x < PAD.left || x > cv.width - PAD.right) continue;
+    // Ligne pointillée verticale
+    ctx.strokeStyle = isIM3 ? 'rgba(255,160,0,0.55)' : 'rgba(170,80,255,0.45)';
+    ctx.lineWidth   = 1;
+    ctx.setLineDash(isIM3 ? [5, 4] : [2, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x, PAD.top + 22);
+    ctx.lineTo(x, baseY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label ordre
+    ctx.font      = 'bold 8px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = isIM3 ? 'rgba(255,160,0,0.85)' : 'rgba(170,80,255,0.8)';
+    ctx.fillText(`IM${order}`, x, PAD.top + 10);
+    // Fréquence
+    ctx.font      = '7px Courier New';
+    ctx.fillStyle = isIM3 ? 'rgba(255,160,0,0.6)' : 'rgba(170,80,255,0.6)';
+    ctx.fillText(freq, x, PAD.top + 20);
+  }
+  ctx.restore();
+}
+
+// ── Peak ──────────────────────────────────────────────────
+
+function drawPeak(baseY) {
+  if (data.length < 2) return;
+  const pts = data
+    .slice().sort((a, b) => a.freq - b.freq)
+    .map(d => ({ x: f2x(d.freq), y: r2y(d.peak) }));
+  ctx.save();
+  ctx.beginPath(); smoothPath(pts);
+  ctx.strokeStyle = daylight ? '#cc4400' : '#ff8800'; ctx.lineWidth = 1;
+  ctx.shadowColor = daylight ? '#cc4400' : '#ff8800'; ctx.shadowBlur = daylight ? 0 : 4;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Bezier lisse ──────────────────────────────────────────
+
+function smoothPath(pts) {
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const mx = (pts[i].x + pts[i+1].x) / 2;
+    const my = (pts[i].y + pts[i+1].y) / 2;
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+  }
+  ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+}
+
+// ── Axe X ─────────────────────────────────────────────────
+
+function drawXAxis(plotH, baseY) {
+  ctx.font = '9px Courier New'; ctx.textAlign = 'center'; ctx.fillStyle = daylight ? '#556' : '#444';
+
+  if (focusMode && data.length > 0) {
+    // En mode Focus : un tick par channel sélectionné (déjà dessiné dans drawFocusBars)
+    // On affiche juste les bornes de la plage zoomée
+    for (const f of [dispFMin, dispFMax]) {
+      const x = f2x(f);
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY + 4); ctx.stroke();
+      ctx.fillStyle = '#333';
+      ctx.fillText(f, x, baseY + 14);
+    }
+  } else {
+    const XLABELS = [5650,5680,5710,5740,5770,5800,5830,5860,5890,5920,5945];
+    for (const f of XLABELS) {
+      if (f < dispFMin || f > dispFMax) continue;
+      const x = f2x(f);
+      ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY + 4); ctx.stroke();
+      ctx.fillStyle = '#444';
+      ctx.fillText(f, x, baseY + 14);
+    }
+    for (const d of data) {
+      if (!d.band || !d.label) continue;
+      const bi = BAND_DEFS.indexOf(d.band);
+      if (!bandVisible[bi]) continue;
+      const x = f2x(d.freq);
+      ctx.strokeStyle = `rgba(${hexRgb(d.band.color)},0.5)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY + 3); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = daylight ? '#778' : '#2a2a44'; ctx.font = '10px Courier New'; ctx.textAlign = 'center';
+  ctx.fillText('MHz', PAD.left + (cv.width - PAD.left - PAD.right) / 2, baseY + 28);
+}
+
+// ── Axe Y ─────────────────────────────────────────────────
+
+function drawYAxis(plotH) {
+  ctx.font = '9px Courier New'; ctx.textAlign = 'right'; ctx.fillStyle = daylight ? '#556' : '#333';
+  const steps = 5;
+  for (let i = 0; i <= steps; i++) {
+    const val = dispMin + (dispMax - dispMin) * (1 - i / steps);
+    const y   = PAD.top + (plotH / steps) * i;
+    ctx.fillText(Math.round(val), PAD.left - 6, y + 3);
+  }
+  ctx.save();
+  ctx.translate(12, PAD.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center';
+  ctx.fillStyle = '#1a1a36'; ctx.font = '10px Courier New';
+  ctx.fillText('RSSI', 0, 0);
+  ctx.restore();
+}
+
+// ── Helper hex→rgb ────────────────────────────────────────
+
+function hexRgb(h) {
+  return `${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)}`;
+}
+
+// ════════════════════════════════════════════════════════
+//  TOOLTIP
+// ════════════════════════════════════════════════════════
+
+const tip = document.getElementById('tip');
+
+cv.addEventListener('mousemove', e => {
+  if (!data.length) { tip.style.display = 'none'; return; }
+  const rect = cv.getBoundingClientRect();
+  const mx   = (e.clientX - rect.left) * (cv.width / rect.width);
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < data.length; i++) {
+    const d = Math.abs(f2x(data[i].freq) - mx);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  if (bestDist > 50) { tip.style.display = 'none'; return; }
+  const d = data[best];
+  document.getElementById('tt-band').textContent =
+    (d.band ? d.band.name : 'hors bande') + (d.label ? ' · ' + d.label : '');
+  document.getElementById('tt-freq').textContent = d.freq + ' MHz';
+  document.getElementById('tt-rssi').textContent = 'RSSI ' + d.cur + '  (' + pct(d.cur) + '%)';
+  document.getElementById('tt-peak').textContent = 'Peak ' + d.peak + '  (' + pct(d.peak) + '%)';
+  tip.style.display = 'block';
+  tip.style.left = (e.clientX + 16) + 'px';
+  tip.style.top  = (e.clientY - 10) + 'px';
+});
+cv.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+
+// ════════════════════════════════════════════════════════
+//  CAPTURES
+// ════════════════════════════════════════════════════════
+
+const CAP_COLORS = [
+  '#ff6644','#44aaff','#ffcc00','#44ffbb',
+  '#ff44cc','#aa88ff','#ff9944','#88ff44',
+];
+
+let captures = [];   // [{ id, name, time, color, visible, pts:[{freq,rssi}] }]
+let capCount  = 0;
+
+// ── Dessin des captures sur le canvas ─────────────────
+function drawCaptures(plotH, baseY) {
+  if (captures.length === 0) return;
+
+  for (const cap of captures) {
+    if (!cap.visible) continue;
+
+    // Construire la liste de points triés dans la plage visible
+    const pts = cap.pts
+      .filter(p => p.freq >= dispFMin && p.freq <= dispFMax)
+      .map(p => ({ x: f2x(p.freq), y: r2y(p.rssi) }));
+    if (pts.length < 2) continue;
+
+    ctx.save();
+    ctx.beginPath();
+    // Smooth path (même logique que drawSpectrum)
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      const mx = (pts[i - 1].x + pts[i].x) / 2;
+      ctx.bezierCurveTo(mx, pts[i - 1].y, mx, pts[i].y, pts[i].x, pts[i].y);
+    }
+    ctx.strokeStyle = cap.color;
+    ctx.lineWidth   = 1.5;
+    ctx.globalAlpha = 0.55;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.restore();
+
+    // Label à droite
+    const lastPt = pts[pts.length - 1];
+    ctx.save();
+    ctx.font = '9px Courier New';
+    ctx.fillStyle = cap.color;
+    ctx.globalAlpha = 0.7;
+    ctx.textAlign = 'left';
+    ctx.fillText(cap.name, lastPt.x + 4, lastPt.y - 2);
+    ctx.restore();
+  }
+}
+
+// ── Capturer le spectre courant ────────────────────────
+function captureSpectrum() {
+  if (data.length < 2) return;
+  capCount++;
+  const cap = {
+    id:      Date.now(),
+    name:    'Cap ' + capCount,
+    time:    new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    color:   CAP_COLORS[(captures.length) % CAP_COLORS.length],
+    visible: true,
+    pts:     data.map(d => ({ freq: d.freq, rssi: d.cur }))
+  };
+  captures.push(cap);
+  renderCaptureList();
+}
+
+// ── Supprimer une capture ──────────────────────────────
+function deleteCapture(id) {
+  captures = captures.filter(c => c.id !== id);
+  renderCaptureList();
+}
+
+// ── Afficher / masquer une capture ────────────────────
+function toggleCapture(id) {
+  const cap = captures.find(c => c.id === id);
+  if (cap) { cap.visible = !cap.visible; renderCaptureList(); }
+}
+
+// ── Renommer une capture (inline) ─────────────────────
+function startRename(cap, nameEl) {
+  const input = document.createElement('input');
+  input.type  = 'text';
+  input.value = cap.name;
+  input.style.cssText = `
+    width:100%; background:#111122; color:#ddd; border:1px solid #44aaff;
+    border-radius:2px; font-family:inherit; font-size:10px;
+    padding:1px 4px; outline:none;
+  `;
+  nameEl.replaceWith(input);
+  input.select();
+  const commit = () => {
+    const val = input.value.trim();
+    if (val) cap.name = val;
+    renderCaptureList();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { input.blur(); }
+    if (e.key === 'Escape') { input.value = cap.name; input.blur(); }
+    e.stopPropagation();
+  });
+}
+
+// ── Rendu de la liste ──────────────────────────────────
+function renderCaptureList() {
+  const el = document.getElementById('capture-list');
+  el.innerHTML = '';
+  if (captures.length === 0) {
+    el.innerHTML = '<div style="padding:10px 10px;color:#252540;font-size:9px;text-align:center">Aucune capture</div>';
+    return;
+  }
+  for (const cap of captures) {
+    const row = document.createElement('div');
+    row.className = 'cap-item' + (cap.visible ? '' : ' hidden');
+
+    const dot     = document.createElement('div');
+    dot.className = 'cap-dot';
+    dot.style.cssText = `background:${cap.color}; border-color:${cap.color}88`;
+
+    const info    = document.createElement('div');
+    info.className = 'cap-info';
+
+    const nameEl  = document.createElement('div');
+    nameEl.className = 'cap-name';
+    nameEl.textContent = cap.name;
+    nameEl.title = 'Double-clic pour renommer';
+
+    const timeEl  = document.createElement('div');
+    timeEl.className = 'cap-time';
+    timeEl.textContent = cap.time;
+
+    info.appendChild(nameEl);
+    info.appendChild(timeEl);
+
+    const del     = document.createElement('div');
+    del.className = 'cap-del';
+    del.title     = 'Supprimer';
+    del.dataset.id = cap.id;
+    del.textContent = '✕';
+
+    row.appendChild(dot);
+    row.appendChild(info);
+    row.appendChild(del);
+
+    // Double-clic sur le nom → renommer
+    nameEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startRename(cap, nameEl);
+    });
+
+    // Clic simple → toggle visible / supprimer
+    row.addEventListener('click', (e) => {
+      if (e.target === del || e.target.classList.contains('cap-del')) {
+        deleteCapture(cap.id);
+      } else if (e.target !== nameEl) {
+        toggleCapture(cap.id);
+      }
+    });
+
+    el.appendChild(row);
+  }
+}
+
+// ── Export JSON ────────────────────────────────────────
+function exportCaptures() {
+  if (captures.length === 0) return;
+  const json = JSON.stringify({ version: 1, captures }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'captures_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── Import JSON ────────────────────────────────────────
+function importCaptures(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const obj = JSON.parse(e.target.result);
+      const imported = (obj.captures || obj);  // accepte liste brute aussi
+      if (!Array.isArray(imported)) return;
+      for (const cap of imported) {
+        if (!cap.pts || !Array.isArray(cap.pts)) continue;
+        capCount++;
+        captures.push({
+          id:      Date.now() + Math.random(),
+          name:    cap.name || ('Cap ' + capCount),
+          time:    cap.time || '--:--:--',
+          color:   cap.color || CAP_COLORS[captures.length % CAP_COLORS.length],
+          visible: cap.visible !== false,
+          pts:     cap.pts,
+        });
+      }
+      renderCaptureList();
+    } catch(err) { console.error('Import JSON invalide', err); }
+  };
+  reader.readAsText(file);
+}
+
+// ── Boutons ────────────────────────────────────────────
+// ════════════════════════════════════════════════════════
+//  CALIBRATION — canal par canal, courbe interpolée
+// ════════════════════════════════════════════════════════
+
+// calMeasured[i] = valeur moyenne mesurée pour CAL_FREQS[i], ou null si pas encore mesuré
+let calMeasured    = Array(8).fill(null);
+let calStep        = 0;   // index canal courant (0-7)
+const CAL_LABELS   = ['R1','R2','R3','R4','R5','R6','R7','R8'];
+
+// Interpolation linéaire de l'offset sur tout le spectre
+function getCalOffset(freq) {
+  if (!calActive) return 0;
+  const pts = CAL_FREQS.map((f, i) => ({ f, off: calOffsets.get(f) || 0 }));
+  if (freq <= pts[0].f)   return pts[0].off;
+  if (freq >= pts[7].f)   return pts[7].off;
+  for (let i = 0; i < 7; i++) {
+    if (freq >= pts[i].f && freq <= pts[i+1].f) {
+      const t = (freq - pts[i].f) / (pts[i+1].f - pts[i].f);
+      return pts[i].off + t * (pts[i+1].off - pts[i].off);
+    }
+  }
+  return 0;
+}
+
+function calRenderChannels() {
+  const list = document.getElementById('cal-ch-list');
+  list.innerHTML = '';
+  const maxVal = Math.max(...calMeasured.filter(v => v !== null), 1);
+  for (let i = 0; i < 8; i++) {
+    const freq  = CAL_FREQS[i];
+    const val   = calMeasured[i];
+    const off   = calOffsets.get(freq);
+    const pct   = val !== null ? Math.round(val / maxVal * 100) : 0;
+    const state = val !== null ? 'done' : (i === calStep && calState === 'measuring' ? 'current' : 'pending');
+    const row   = document.createElement('div');
+    row.className = 'cal-ch-row ' + state;
+    const offStr = off !== undefined ? `<span class="cal-ch-off ${off>=0?'pos':'neg'}">${off>=0?'+':''}${Math.round(off)}</span>` : '<span class="cal-ch-off">—</span>';
+    row.innerHTML = `
+      <span class="cal-ch-name" style="color:${state==='current'?'#ff0':state==='done'?'#0fa':'#444'}">${CAL_LABELS[i]}</span>
+      <div class="cal-ch-bar-track"><div class="cal-ch-bar-fill" style="width:${pct}%"></div></div>
+      <span class="cal-ch-val">${val !== null ? val : '—'}</span>
+      ${offStr}`;
+    list.appendChild(row);
+  }
+}
+
+function calUpdateStep() {
+  const freq  = CAL_FREQS[calStep];
+  document.getElementById('cal-step-label').textContent =
+    `Canal ${calStep+1}/8  ·  ${CAL_LABELS[calStep]}  ·  ${freq} MHz`;
+  document.getElementById('cal-step-hint').textContent =
+    `Réglez le drone sur ${CAL_LABELS[calStep]} (${freq} MHz) puis appuyez sur MESURER`;
+  document.getElementById('cal-progress-fill').style.width = '0%';
+  document.getElementById('cal-progress-text').textContent = '—';
+  document.getElementById('btn-cal-measure').disabled = false;
+  document.getElementById('btn-cal-next').disabled = true;
+  calRenderChannels();
+}
+
+function calUpdateProgress() {
+  const pct = Math.round(calSweepsDone / CAL_SWEEPS * 100);
+  document.getElementById('cal-progress-fill').style.width = pct + '%';
+  document.getElementById('cal-progress-text').textContent =
+    `Sweep ${calSweepsDone}/${CAL_SWEEPS}…`;
+  calRenderChannels();
+}
+
+function calFinishStep() {
+  // Moyenne du canal courant
+  const freq = CAL_FREQS[calStep];
+  const val  = Math.round((calAccum.get(freq) || 0) / calSweepsDone);
+  calMeasured[calStep] = val;
+  document.getElementById('cal-progress-fill').style.width = '100%';
+  document.getElementById('cal-progress-text').textContent = `${CAL_LABELS[calStep]} : ${val} ADC`;
+  document.getElementById('btn-cal-next').disabled = false;
+  document.getElementById('btn-cal-measure').disabled = true;
+  // Si tous les canaux sont mesurés → calculer la courbe
+  if (calMeasured.every(v => v !== null)) calComputeCurve();
+  calRenderChannels();
+}
+
+function calComputeCurve() {
+  const vals = calMeasured.filter(v => v !== null);
+  const mean = Math.round(vals.reduce((a,b)=>a+b,0) / vals.length);
+  for (let i = 0; i < 8; i++) {
+    if (calMeasured[i] !== null)
+      calOffsets.set(CAL_FREQS[i], mean - calMeasured[i]);
+  }
+  document.getElementById('cal-step-label').textContent = 'Calibration complète ✓';
+  document.getElementById('cal-step-hint').textContent =
+    `Référence moyenne : ${mean} ADC — courbe interpolée sur tout le spectre`;
+  document.getElementById('btn-cal-apply').disabled = false;
+  document.getElementById('btn-cal-next').disabled = true;
+}
+
+async function calStartStep() {
+  if (!writer) return;
+  calState = 'measuring';
+  calSweepsDone = 0;
+  calAccum.clear();
+  // Focus sur le canal courant uniquement
+  focusMode = true;
+  focusSelected.clear();
+  focusSelected.add(CAL_FREQS[calStep]);
+  await sendFocusCommand();
+  document.getElementById('btn-cal-measure').disabled = true;
+  document.getElementById('btn-cal-next').disabled = true;
+  document.getElementById('cal-progress-text').textContent = 'En attente…';
+}
+
+async function calNextStep() {
+  calStep++;
+  calState = 'idle';
+  if (calStep < 8) {
+    calUpdateStep();
+    // Focus sur le prochain canal
+    focusMode = true;
+    focusSelected.clear();
+    focusSelected.add(CAL_FREQS[calStep]);
+    await sendFocusCommand();
+  }
+}
+
+async function calRestoreState() {
+  focusMode = calPrevFocusMode;
+  focusSelected.clear();
+  calPrevFocusSelected.forEach(f => focusSelected.add(f));
+  if (calPrevFocusMode && focusSelected.size > 0) {
+    await sendFocusCommand();
+  } else {
+    focusMode = false;
+    focusSelected.clear();
+    data = []; dataMap.clear(); currentScanFreq = -1;
+    ignoreData = true;
+    await writer.write('FOCUS:OFF\n');
+    document.getElementById('btn-focus').classList.remove('on');
+    setFocusOnlyVisible(false);
+    document.querySelectorAll('.btn-step').forEach(b => {
+      b.style.opacity = ''; b.style.pointerEvents = '';
+    });
+    const activeStep = document.querySelector('.btn-step.active');
+    const step = activeStep ? parseInt(activeStep.dataset.step) : 5;
+    if (step > 0) sendStep(step);
+  }
+}
+
+async function calCancel() {
+  calState = 'idle';
+  document.getElementById('cal-overlay').style.display = 'none';
+  await calRestoreState();
+}
+
+async function calApply() {
+  calActive = true;
+  calState   = 'idle';
+  document.getElementById('cal-overlay').style.display = 'none';
+  document.getElementById('btn-cal-toggle').classList.add('on');
+  document.getElementById('btn-cal-toggle').title = 'Calibration active';
+  // Envoyer les offsets à l'Arduino pour sauvegarde EEPROM
+  if (writer) {
+    const offsets = CAL_FREQS.map(f => Math.round(calOffsets.get(f) || 0)).join(',');
+    try { await writer.write(`CAL:${offsets}\n`); } catch(_) {}
+  }
+  await calRestoreState();
+}
+
+document.getElementById('btn-cal-toggle').addEventListener('click', () => {
+  const overlay = document.getElementById('cal-overlay');
+  if (overlay.style.display !== 'none') { calCancel(); return; }
+  // Ouvrir : reset UI au canal 0
+  calStep = 0;
+  calSweepsDone = 0;
+  calAccum.clear();
+  calState = 'idle';
+  // Sauvegarder état actuel
+  calPrevFocusMode = focusMode;
+  calPrevFocusSelected = new Set(focusSelected);
+  calUpdateStep();
+  document.getElementById('btn-cal-apply').disabled = !calOffsets.size;
+  overlay.style.display = 'flex';
+});
+document.getElementById('btn-cal-measure').addEventListener('click', calStartStep);
+document.getElementById('btn-cal-next').addEventListener('click', calNextStep);
+document.getElementById('btn-cal-apply').addEventListener('click', calApply);
+document.getElementById('btn-cal-cancel').addEventListener('click', calCancel);
+
+document.getElementById('btn-capture').addEventListener('click', captureSpectrum);
+document.getElementById('btn-export').addEventListener('click', exportCaptures);
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('import-file').value = '';
+  document.getElementById('import-file').click();
+});
+document.getElementById('import-file').addEventListener('change', (e) => {
+  importCaptures(e.target.files[0]);
+});
+
+// Init liste
+renderCaptureList();
+
+// ════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════
+
+if (!navigator.serial) {
+  document.getElementById('no-serial').style.display = 'flex';
+}
+
+requestAnimationFrame(draw);
+
+// ════════════════════════════════════════════════════════
+//  FIRMWARE FLASH — ESP32-S3 (overlay info uniquement)
+// ════════════════════════════════════════════════════════
+
+// ── Flash overlay ────────────────────────────────────────────────
+document.getElementById('btn-flash-open').addEventListener('click', () => {
+  document.getElementById('flash-overlay').style.display = 'flex';
+  document.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+  document.getElementById('flash-log').innerHTML = '<span style="color:#475569;">Sélectionner un fichier .bin puis cliquer sur Flasher.</span>';
+  document.getElementById('flash-prog-bar').style.width = '0';
+  document.getElementById('flash-pct').textContent = '0%';
+});
+document.getElementById('btn-flash-close').addEventListener('click', () => {
+  document.getElementById('flash-overlay').style.display = 'none';
+});
+
+// Affichage nom de fichier sélectionné
+document.getElementById('flash-file-input').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  const lbl = document.getElementById('flash-file-label');
+  lbl.textContent = f ? `📄 ${f.name}  (${(f.size/1024).toFixed(1)} Ko)` : '📂 Choisir un fichier .bin';
+});
+
+function flashLog(msg, cls = '') {
+  const log = document.getElementById('flash-log');
+  const line = document.createElement('div');
+  if (cls) line.className = 'flash-' + cls;
+  line.textContent = msg;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setFlashPct(pct) {
+  document.getElementById('flash-prog-bar').style.width = pct + '%';
+  document.getElementById('flash-pct').textContent = pct + '%';
+}
+
+document.getElementById('btn-flash-start').addEventListener('click', async () => {
+  const fileInput = document.getElementById('flash-file-input');
+  if (!fileInput.files.length) { flashLog('⚠ Sélectionner un fichier .bin', 'warn'); return; }
+
+  const file = fileInput.files[0];
+  const addrRaw = document.getElementById('flash-addr-input').value.trim().replace(/^0x/i,'') || '0';
+  const offset = parseInt(addrRaw, 16);
+
+  // Lire le fichier
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  const binaryStr = Array.from(bytes, b => String.fromCharCode(b)).join('');
+
+  const log = document.getElementById('flash-log');
+  log.innerHTML = '';
+  setFlashPct(0);
+
+  // Déconnecter le scanner si actif
+  if (port || reader) {
+    flashLog('ℹ Déconnexion du scanner en cours…', 'info');
+    await disconnect().catch(() => {});
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  document.getElementById('btn-flash-start').disabled = true;
+  let flashPort = null;
+  let transport = null;
+
+  try {
+    flashLog('● Sélectionner le port série de l\'ESP32…');
+    flashPort = await navigator.serial.requestPort();
+    await flashPort.open({ baudRate: 115200 });
+
+    const { ESPLoader, Transport } = esptooljs;
+    transport = new Transport(flashPort, true);
+
+    const loader = new ESPLoader({
+      transport,
+      baudrate: 921600,
+      terminal: {
+        clean() {},
+        writeLine(s) { if (s && s.trim()) flashLog(s); },
+        write(s) {}
+      }
+    });
+
+    flashLog('● Synchronisation avec le bootloader…');
+    flashLog('  → Maintenir BOOT + appuyer RESET si bloqué ici', 'info');
+
+    const chip = await loader.main();
+    flashLog('✓ Puce : ' + chip, 'ok');
+    flashLog(`● Flash @ 0x${offset.toString(16).toUpperCase()}  (${(bytes.length/1024).toFixed(1)} Ko, compression activée)…`);
+
+    await loader.writeFlash({
+      fileArray: [{ data: binaryStr, address: offset }],
+      flashSize: 'keep',
+      flashMode: 'keep',
+      flashFreq: 'keep',
+      eraseAll: false,
+      compress: true,
+      reportProgress(idx, written, total) {
+        const pct = Math.round(written / total * 100);
+        setFlashPct(pct);
+        if (pct % 20 === 0) flashLog(`  ${pct}%  (${(written/1024).toFixed(0)} / ${(total/1024).toFixed(0)} Ko)`);
+      },
+      calculateMD5Hash(image) {
+        return CryptoJS.MD5(CryptoJS.enc.Latin1.parse(image)).toString();
+      }
+    });
+
+    setFlashPct(100);
+    flashLog('✓ Flash terminé !', 'ok');
+
+    await loader.hardReset();
+    flashLog('● Reset ESP32…');
+    await transport.disconnect();
+    flashLog('✓ ESP32 redémarré — reconnecter le scanner.', 'ok');
+
+  } catch(e) {
+    flashLog('✗ ' + e.message, 'error');
+    if (transport) { try { await transport.disconnect(); } catch(_){} }
+    if (flashPort && flashPort.readable) { try { await flashPort.close(); } catch(_){} }
+  } finally {
+    document.getElementById('btn-flash-start').disabled = false;
+  }
+});
+
+// ── Curseurs de plage de fréquences ──────────────────────────
+(function () {
+  const handleL = document.getElementById('freq-handle-l');
+  const handleR = document.getElementById('freq-handle-r');
+  const fill    = document.getElementById('freq-fill');
+  const track   = document.getElementById('freq-track-line');
+  const RANGE   = FMAX - FMIN;
+  const SNAP    = 5;   // MHz
+  const GAP     = 20;  // MHz min entre les deux curseurs
+
+  function pct(f) { return (f - FMIN) / RANGE * 100; }
+
+  function render() {
+    const lp = pct(sliderFMin), rp = pct(sliderFMax);
+    handleL.style.left = lp + '%';
+    handleR.style.left = rp + '%';
+    fill.style.left  = lp + '%';
+    fill.style.width = (rp - lp) + '%';
+    handleL.textContent = sliderFMin;
+    handleR.textContent = sliderFMax;
+  }
+
+  let dragging = null;
+  let dragStartMin = sliderFMin, dragStartMax = sliderFMax;
+
+  function freqFromPointer(clientX) {
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round((FMIN + ratio * RANGE) / SNAP) * SNAP;
+  }
+
+  function onMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const f = freqFromPointer(cx);
+    if (dragging === 'l') sliderFMin = Math.max(FMIN, Math.min(sliderFMax - GAP, f));
+    else                  sliderFMax = Math.min(FMAX, Math.max(sliderFMin + GAP, f));
+    render();
+  }
+
+  function onUp() {
+    if (!dragging) return;
+    handleL.classList.remove('dragging');
+    handleR.classList.remove('dragging');
+    dragging = null;
+    // Envoyer la nouvelle plage à l'ESP32 si la valeur a changé pendant le drag
+    if (typeof writer !== 'undefined' && writer &&
+        (sliderFMin !== dragStartMin || sliderFMax !== dragStartMax)) {
+      writer.write(`RANGE:${sliderFMin},${sliderFMax}\n`).catch(() => {});
+    }
+  }
+
+  handleL.addEventListener('mousedown',  e => { dragging = 'l'; dragStartMin = sliderFMin; dragStartMax = sliderFMax; handleL.classList.add('dragging'); e.preventDefault(); });
+  handleR.addEventListener('mousedown',  e => { dragging = 'r'; dragStartMin = sliderFMin; dragStartMax = sliderFMax; handleR.classList.add('dragging'); e.preventDefault(); });
+  handleL.addEventListener('touchstart', e => { dragging = 'l'; dragStartMin = sliderFMin; dragStartMax = sliderFMax; handleL.classList.add('dragging'); e.preventDefault(); }, { passive: false });
+  handleR.addEventListener('touchstart', e => { dragging = 'r'; dragStartMin = sliderFMin; dragStartMax = sliderFMax; handleR.classList.add('dragging'); e.preventDefault(); }, { passive: false });
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('touchend', onUp);
+
+  // Double-clic pour réinitialiser la plage complète
+  document.getElementById('freq-track').addEventListener('dblclick', () => {
+    sliderFMin = FMIN; sliderFMax = FMAX; render();
+    if (typeof writer !== 'undefined' && writer) {
+      writer.write(`RANGE:${FMIN},${FMAX}\n`).catch(() => {});
+      if (typeof data !== 'undefined') { data = []; dataMap.clear(); }
+    }
+  });
+
+  // Traits verticaux sous le slider
+  const tickContainer = document.getElementById('freq-ticks');
+  [5660,5700,5740,5780,5820,5860,5900,5940].forEach(f => {
+    const t = document.createElement('div');
+    t.className = 'freq-tick';
+    t.style.left = pct(f) + '%';
+    tickContainer.appendChild(t);
+  });
+
+  render();
+})();
+</script>
+
+<script>
+/* ── Dropdown interaction ──────────────────────────────── */
+(function () {
+  function closeAll() {
+    document.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+    document.querySelectorAll('.dropdown-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
+  }
+
+  document.querySelectorAll('.dropdown-trigger').forEach(trigger => {
+    trigger.addEventListener('click', e => {
+      e.stopPropagation();
+      const menu = trigger.nextElementSibling;
+      const wasOpen = menu.classList.contains('open');
+      closeAll();
+      if (!wasOpen) {
+        menu.classList.add('open');
+        trigger.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  // Keep dropdowns open when clicking inside them (for toggles/chips)
+  document.querySelectorAll('.dropdown-menu').forEach(m => {
+    m.addEventListener('click', e => e.stopPropagation());
+  });
+
+  // Close on outside click
+  document.addEventListener('click', closeAll);
+
+  // Close presets on selection
+  document.querySelectorAll('.btn-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const menu = btn.closest('.dropdown-menu');
+      if (menu) {
+        menu.classList.remove('open');
+        const trigger = menu.previousElementSibling;
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      }
+    });
+  });
+
+  // Sync Analyse dropdown trigger highlight when focus/im3/im5 change
+  const analyseTrigger = document.getElementById('dd-analyse-trigger');
+  function syncAnalyseTrigger() {
+    const focusOn = document.getElementById('btn-focus').classList.contains('on');
+    const im3On   = document.getElementById('btn-im3').classList.contains('on');
+    const im5On   = document.getElementById('btn-im5').classList.contains('on');
+    analyseTrigger.classList.toggle('has-on', focusOn);
+  }
+  ['btn-focus','btn-im3','btn-im5'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      setTimeout(syncAnalyseTrigger, 0);
+    });
+  });
+  syncAnalyseTrigger();
+})();
+</script>
+
+<!-- ── Alerte balise non autorisée ──────────────────────── -->
+<div id="drone-alert">
+  <div id="alert-msg">🚨 <span id="alert-txt">BALISE NON AUTORISÉE DÉTECTÉE</span></div>
+</div>
+
+<!-- ── Modal flottante drone ────────────────────────────── -->
+<div id="drone-modal">
+  <div id="dm-header">
+    <span id="dm-icon">🛸</span>
+    <span id="dm-title">—</span>
+    <span id="dm-badge-wrap"></span>
+    <button id="dm-close" onclick="closeDroneModal()">✕</button>
+  </div>
+  <div id="dm-map"></div>
+  <button id="dm-center-btn" onclick="centerOnMe()">⊕ Centrer sur ma position</button>
+  <div id="dm-info"></div>
+</div>
+
+</body>
+</html>
