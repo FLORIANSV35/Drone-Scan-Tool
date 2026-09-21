@@ -83,6 +83,8 @@ Commandes acceptées :
 - EU Remote ID ASTM F3411-22a (OUI `FA:0B:BC`, subtype `0x0D`)
 - EU Remote ID ASTM F3411-19, ancienne version (OUI `5F:04:01`)
 
+> ⚠️ **La détection de l'EU Remote ID n'est pas encore fiable.** Certaines balises peuvent ne pas être détectées ou être mal décodées.
+
 Le sniffer écoute un seul canal Wi-Fi à la fois (canal 6 par défaut, modifiable via `WIFI_SNIFFER_CHANNEL`), il ne voit donc que les balises émises sur ce canal.
 
 ## Avertissement
