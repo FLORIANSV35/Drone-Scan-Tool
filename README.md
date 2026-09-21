@@ -1,92 +1,92 @@
 # Drone Scan Tool
 
-Analyseur de spectre 5,8 GHz (FPV) et détecteur de balises drone (Remote ID), basé sur un **ESP32-S3** et un module **RX5808**.
+A 5.8 GHz (FPV) spectrum analyzer and drone beacon (Remote ID) detector, built on an **ESP32-S3** and an **RX5808** module.
 
-L'ESP32-S3 fait deux choses en parallèle :
+The ESP32-S3 does two things in parallel:
 
-- **Spectre 5,8 GHz** : il balaie 5645–5945 MHz avec le RX5808 et envoie les mesures RSSI par le port série.
-- **Sniffer de balises drone** : il écoute les trames Wi-Fi 2.4 GHz qui transportent l'identification des drones et les renvoie en JSON.
+- **5.8 GHz spectrum**: it sweeps 5645–5945 MHz with the RX5808 and streams RSSI measurements over the serial port.
+- **Drone beacon sniffer**: it listens for the 2.4 GHz Wi-Fi frames that carry drone identification and forwards them as JSON.
 
-Une application web (Web Serial) affiche le spectre et la carte des drones détectés, et permet de flasher le firmware depuis le navigateur.
+A web app (Web Serial) displays the spectrum and a map of detected drones, and can flash the firmware from the browser.
 
-## Contenu du dépôt
+## Repository layout
 
 ```
 firmware/drone_scan_tool/
-  drone_scan_tool.ino   Firmware Arduino (ESP32-S3)
-  config.h              Broches, plage de scan, paramètres du sniffer
+  drone_scan_tool.ino   Arduino firmware (ESP32-S3)
+  config.h              Pins, scan range, sniffer settings
 web/
-  index.html            Application web (fichier unique, sans build)
+  index.html            Web app (single file, no build step)
 ```
 
-## Matériel
+## Hardware
 
 - ESP32-S3 DevKit
-- Module récepteur RX5808 (avec RSSI accessible)
+- RX5808 receiver module (with RSSI output accessible)
 
-### Branchements
+### Wiring
 
-| RX5808        | ESP32-S3         |
-|---------------|------------------|
-| CH1 (DATA)    | GPIO 4           |
-| CH2 (LE)      | GPIO 5           |
-| CH3 (CLK)     | GPIO 6           |
-| RSSI          | GPIO 1 (ADC1_CH0)|
-| VCC           | 3.3 V            |
-| GND           | GND              |
+| RX5808        | ESP32-S3          |
+|---------------|-------------------|
+| CH1 (DATA)    | GPIO 4            |
+| CH2 (LE)      | GPIO 5            |
+| CH3 (CLK)     | GPIO 6            |
+| RSSI          | GPIO 1 (ADC1_CH0) |
+| VCC           | 3.3 V             |
+| GND           | GND               |
 
-GPIO 19/20 sont réservés à l'USB CDC. L'ADC2 est incompatible avec le Wi-Fi, d'où l'usage d'une broche ADC1.
+GPIO 19/20 are reserved for USB CDC. ADC2 is incompatible with Wi-Fi, which is why an ADC1 pin is used.
 
-## Installation du firmware
+## Flashing the firmware
 
-1. Installer le support ESP32 dans l'Arduino IDE (ou `arduino-cli`).
-2. Ouvrir `firmware/drone_scan_tool/drone_scan_tool.ino`.
-3. Choisir la carte ESP32-S3 (avec USB CDC on boot activé) puis téléverser.
+1. Install ESP32 support in the Arduino IDE (or `arduino-cli`).
+2. Open `firmware/drone_scan_tool/drone_scan_tool.ino`.
+3. Select the ESP32-S3 board (with USB CDC on boot enabled) and upload.
 
-Les réglages (broches, plage de fréquences, canal Wi-Fi du sniffer, délais) sont dans `config.h`.
+Settings (pins, frequency range, sniffer Wi-Fi channel, delays) are in `config.h`.
 
-## Application web
+## Web app
 
-Ouvrir `web/index.html` dans un navigateur basé sur Chromium (Chrome, Edge), car Web Serial n'existe pas dans Firefox ni Safari. Connecter l'ESP32-S3, choisir le débit (115200 par défaut) et se connecter.
+Open `web/index.html` in a Chromium-based browser (Chrome, Edge), since Web Serial is not available in Firefox or Safari. Connect the ESP32-S3, pick the baud rate (115200 by default) and connect.
 
-L'application charge Leaflet, CryptoJS et esptool-js depuis des CDN, elle a donc besoin d'une connexion Internet.
+The app loads Leaflet, CryptoJS and esptool-js from CDNs, so it needs an Internet connection.
 
-## Protocole série
+## Serial protocol
 
-Sortie, 115200 bauds, une ligne par message :
+Output, 115200 baud, one message per line:
 
-| Ligne                                | Signification                          |
+| Line                                 | Meaning                                |
 |--------------------------------------|----------------------------------------|
-| `5658:123`                           | Mesure RSSI (fréquence MHz : valeur)   |
-| `EOS`                                | Fin d'un balayage complet              |
-| `BOOT:...`                           | Informations au démarrage              |
-| `ACK:...`                            | Acquittement d'une commande            |
-| `DIAG:...`                           | Diagnostic RSSI                        |
-| `{"id":...}`                         | Balise drone détectée ou mise à jour   |
-| `{"event":"timeout","id":"..."}`     | Balise expirée (30 s sans trame)       |
+| `5658:123`                           | RSSI measurement (frequency MHz:value) |
+| `EOS`                                | End of a full sweep                    |
+| `BOOT:...`                           | Boot information                       |
+| `ACK:...`                            | Command acknowledgement                |
+| `DIAG:...`                           | RSSI diagnostic                        |
+| `{"id":...}`                         | Drone beacon detected or updated       |
+| `{"event":"timeout","id":"..."}`     | Beacon expired (30 s without a frame)  |
 
-Commandes acceptées :
+Supported commands:
 
-| Commande       | Effet                                  |
-|----------------|----------------------------------------|
-| `STEP:1/2/5`   | Résolution du scan en MHz              |
-| `SCALE:min,max`| Échelle Y                              |
-| `RANGE:...`    | Plage de balayage                      |
-| `CAL:...`      | Calibration                            |
-| `FOCUS:XXXX`   | Mode focus sur une bande               |
-| `FOCUS:OFF`    | Retour au scan normal                  |
-| `DIAG`         | Diagnostic RSSI                        |
+| Command         | Effect                                 |
+|-----------------|----------------------------------------|
+| `STEP:1/2/5`    | Scan resolution in MHz                 |
+| `SCALE:min,max` | Y-axis scale                           |
+| `RANGE:...`     | Sweep range                            |
+| `CAL:...`       | Calibration                            |
+| `FOCUS:XXXX`    | Focus mode on a band                   |
+| `FOCUS:OFF`     | Back to normal scan                    |
+| `DIAG`          | RSSI diagnostic                        |
 
-## Protocoles drone reconnus
+## Supported drone protocols
 
-- DGAC France (arrêté du 27/12/2019, OUI `6A:5C:35`)
+- DGAC France (order of 27/12/2019, OUI `6A:5C:35`)
 - EU Remote ID ASTM F3411-22a (OUI `FA:0B:BC`, subtype `0x0D`)
-- EU Remote ID ASTM F3411-19, ancienne version (OUI `5F:04:01`)
+- EU Remote ID ASTM F3411-19, legacy version (OUI `5F:04:01`)
 
-> ⚠️ **La détection de l'EU Remote ID n'est pas encore fiable.** Certaines balises peuvent ne pas être détectées ou être mal décodées.
+> ⚠️ **EU Remote ID detection is not reliable yet.** Some beacons may be missed or decoded incorrectly.
 
-Le sniffer écoute un seul canal Wi-Fi à la fois (canal 6 par défaut, modifiable via `WIFI_SNIFFER_CHANNEL`), il ne voit donc que les balises émises sur ce canal.
+The sniffer listens on a single Wi-Fi channel at a time (channel 6 by default, configurable via `WIFI_SNIFFER_CHANNEL`), so it only sees beacons transmitted on that channel.
 
-## Avertissement
+## Disclaimer
 
-Cet outil est passif : il écoute seulement. Vérifiez la réglementation locale sur la réception et l'usage de ces données avant de l'utiliser.
+This tool is passive: it only listens. Check your local regulations on receiving and using this data before using it.
