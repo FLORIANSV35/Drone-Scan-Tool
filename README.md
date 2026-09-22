@@ -90,3 +90,7 @@ The sniffer listens on a single Wi-Fi channel at a time (channel 6 by default, c
 ## Disclaimer
 
 This tool is passive: it only listens. Check your local regulations on receiving and using this data before using it.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
