@@ -50,7 +50,13 @@ Two more pins are used only by [Timer Backpack mode](#rotorhazard-timer-backpack
 
 1. Install ESP32 support in the Arduino IDE (or `arduino-cli`).
 2. Open `firmware/drone_scan_tool/drone_scan_tool.ino`.
-3. Select the ESP32-S3 board (with USB CDC on boot enabled) and upload.
+3. Select board **ESP32S3 Dev Module**, with these board options (Tools menu in the Arduino IDE):
+   - **USB CDC On Boot: Disabled** (the default — this board's USB port is wired through a UART bridge chip, not native USB; enabling CDC-on-boot silently redirects `Serial` to the unused native-USB peripheral and nothing comes out)
+   - **PSRAM: OPI PSRAM** (this board has 8 MB of embedded octal PSRAM; leaving PSRAM disabled or set to QSPI silently crashes very early in boot, before anything is printed)
+   - **Flash Size: 16MB**
+4. Upload. **The first time**, or after flashing anything else to this board, also tick **Erase All Flash Before Sketch Upload: Enabled** once — a leftover NVS partition from a different flash layout can crash boot (again silently, before any serial output) the same way a PSRAM mismatch does. Once it's booted cleanly once, you can leave erase disabled for later uploads.
+
+These settings match the **diymore ESP32-S3 DevKitC-1 N16R8** this project was built against; a different ESP32-S3 board may need different Flash Size/PSRAM values — check its exact chip variant (N*R* suffix) if serial output stays silent after flashing.
 
 Settings (pins, frequency range, sniffer Wi-Fi channel, delays) are in `config.h`.
 
