@@ -30,6 +30,11 @@
 #define PIN_BACKPACK_BUTTON  0
 #define BACKPACK_BAUD_RATE   460800   // débit imposé par le protocole ExpressLRS Backpack
 
+// Bind phrase utilisée si aucune n'a encore été définie via
+// BACKPACK:PHRASE: (ou après un effacement complet de la flash).
+// Change-la ici si tu veux une autre valeur par défaut.
+#define DEFAULT_BIND_PHRASE  "CHANGE-ME"
+
 // ── Plage de scan spectre ──────────────────────
 #define FMIN       5645
 #define FMAX       5945

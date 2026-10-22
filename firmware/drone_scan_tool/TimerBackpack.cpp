@@ -67,19 +67,11 @@ static const int maxAttempt  = 5;
 //  Storage (lazy: usable from scan mode too, for backpackSetPhrase())
 // ═══════════════════════════════════════════════
 
-static void ensureStorage() {
-  if (storageReady) return;
-  eeprom.Begin();
-  bpConfig.SetStorageProvider(&eeprom);
-  bpConfig.Load();
-  memcpy(groupAddress, bpConfig.GetGroupAddress(), 6);
-  memcpy(sendAddress, groupAddress, 6);
-  storageReady = true;
-}
-
-void backpackSetPhrase(const char *phrase) {
-  ensureStorage();
-
+// Hashes `phrase` into groupAddress/sendAddress and persists it, the same
+// MD5('-DMY_BINDING_PHRASE="<phrase>"')[0:6] scheme the ExpressLRS
+// Configurator uses. Shared by backpackSetPhrase() (explicit, over serial)
+// and ensureStorage()'s DEFAULT_BIND_PHRASE fallback (silent, automatic).
+static void applyPhrase(const char *phrase) {
   char buf[112]; // "-DMY_BINDING_PHRASE=\"" + up to 64 phrase chars + "\""
   snprintf(buf, sizeof(buf), "-DMY_BINDING_PHRASE=\"%s\"", phrase);
 
@@ -95,6 +87,28 @@ void backpackSetPhrase(const char *phrase) {
   bpConfig.SetGroupAddress(groupAddress);
   bpConfig.SetPhrase(phrase); // kept only so it can be read back later (backpackGetPhrase)
   bpConfig.Commit();
+}
+
+static void ensureStorage() {
+  if (storageReady) return;
+  eeprom.Begin();
+  bpConfig.SetStorageProvider(&eeprom);
+  bpConfig.Load();
+
+  if (bpConfig.GetPhrase()[0] == '\0') {
+    // Nothing set yet (factory-fresh, or after a full flash erase) — apply
+    // the configured default instead of starting with an all-zero address.
+    applyPhrase(DEFAULT_BIND_PHRASE);
+  }
+
+  memcpy(groupAddress, bpConfig.GetGroupAddress(), 6);
+  memcpy(sendAddress, groupAddress, 6);
+  storageReady = true;
+}
+
+void backpackSetPhrase(const char *phrase) {
+  ensureStorage();
+  applyPhrase(phrase);
 
   Serial.printf("ACK:PHRASE=%s,UID=%02X%02X%02X%02X%02X%02X\n",
                 bpConfig.GetPhrase(),
