@@ -1286,10 +1286,10 @@ async function closeSerial(p) {
   if (p) { try { await p.close(); } catch(_) {} }
 }
 
-async function disconnect() {
+async function disconnect(message) {
   const p = port; port = null;
   await closeSerial(p);
-  setStatus('', 'Déconnecté');
+  setStatus('', message || 'Déconnecté');
   btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
 }
 
@@ -3323,10 +3323,7 @@ document.getElementById('btn-bp-switch').addEventListener('click', async () => {
     // avoir le port pour lui — un port série ne peut être ouvert que par un
     // seul programme à la fois. Si cette page le garde ouvert, RotorHazard
     // le voit dans sa liste mais ne peut jamais vraiment lui parler.
-    const p = port; port = null;
-    await closeSerial(p);
-    setStatus('', 'Déconnecté — ESP en mode Backpack, prêt pour RotorHazard');
-    btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
+    await disconnect('Déconnecté — ESP en mode Backpack, prêt pour RotorHazard');
   }
 });
 

@@ -34,8 +34,11 @@
  *   Ce même firmware peut aussi faire office de backpack de chronométrage
  *   ELRS (pont série USB <-> ESP-NOW vers les backpacks VRx des pilotes),
  *   mais jamais en même temps que le scan — voir TimerBackpack.h/.cpp.
- *   MODE:BACKPACK bascule et redémarre dans ce mode (460800 bauds, MSP).
- *   Pour revenir : bouton BOOT maintenu 1,5s, ou taper "MODE:SCAN" en série.
+ *   MODE:BACKPACK bascule et redémarre dans ce mode (460800 bauds, MSP) ;
+ *   une fois basculé, ça reste en mode backpack même après débranchage,
+ *   jusqu'à bascule explicite (voir TimerBackpack.h pour pourquoi).
+ *   Une fois dedans : BACKPACK:BIND (appairage ESP-NOW sans phrase) et
+ *   "MODE:SCAN" en série, ou bouton BOOT maintenu 1,5s, pour revenir.
  */
 
 #include "config.h"
@@ -573,9 +576,9 @@ void rebuildTable() {
   for (uint16_t i=0; i<numFreq; i++) freqTable[i] = rangeMin + (uint16_t)i * freqStep;
 }
 
-// Bascule + reboot vers le mode Timer Backpack. Mémorisé en RAM RTC (voir
-// TimerBackpack.h) : survit à ce reboot logiciel, mais pas à un vrai
-// débranchage — un power cycle retombe toujours en mode scan.
+// Bascule + reboot vers le mode Timer Backpack. Persisté en flash (voir
+// TimerBackpack.h) : survit à tout, y compris un vrai débranchage — c'est
+// nécessaire sur cette carte, où ouvrir le port série la reset déjà.
 void switchToBackpackMode() {
   Serial.println("ACK:MODE=BACKPACK");
   backpackSetPersistedMode(true);
@@ -654,7 +657,7 @@ void handleCommand(const char* cmd) {
   if (strcmp(cmd,"BACKPACK:PHRASE?")==0) {
     Serial.print("ACK:PHRASE="); Serial.println(backpackGetPhrase()); return;
   }
-  if (strcmp(cmd,"MODE:BACKPACK")==0) { switchToBackpackMode(); }
+  if (strcmp(cmd,"MODE:BACKPACK")==0) { switchToBackpackMode(); return; }
   // Marqueur envoyé par l'appli web juste après connexion — sert surtout à
   // l'auto-détection du mode backpack (voir TimerBackpack.cpp), ici on se
   // contente de confirmer qu'on est bien en mode scan.
@@ -715,11 +718,10 @@ if (calValid) {
 // ═══════════════════════════════════════════════
 
 void setup() {
-  // Mode mémorisé en RAM RTC, pas en flash (voir MODE:BACKPACK / "MODE:SCAN"
-  // et TimerBackpack.h) — lu avant toute init scanner/WiFi, car le mode
-  // Timer Backpack ne doit rien partager avec le sniffer WiFi (même radio,
-  // jamais utilisés en même temps). Un vrai débranchage efface la RAM RTC :
-  // on retombe alors toujours en mode scan, par choix.
+  // Mode persisté en flash (voir MODE:BACKPACK / "MODE:SCAN" et
+  // TimerBackpack.h) — lu avant toute init scanner/WiFi, car le mode Timer
+  // Backpack ne doit rien partager avec le sniffer WiFi (même radio, jamais
+  // utilisés en même temps).
   g_backpackMode = backpackGetPersistedMode();
   if (g_backpackMode) {
     backpackSetup();
@@ -775,13 +777,17 @@ analogReadResolution(ADC_RESOLUTION);
 void loop() {
   if (g_backpackMode) { backpackLoop(); return; }
 
-  checkCommand();
+  checkCommand(); // aussi ici (pas seulement dans la boucle ci-dessous) :
+                   // si numFreq tombe à 0 (FOCUS sans bande sélectionnée),
+                   // la boucle ne tourne pas du tout et ce serait la seule
+                   // chance de lire une commande.
 
   for (uint16_t i = 0; i < numFreq; i++) {
-    checkCommand(); // pas seulement une fois par balayage (~2.7s) : sinon
-                     // toute commande/détection (y compris MODE:BACKPACK et
-                     // l'auto-détection '$') peut attendre jusqu'à un
-                     // balayage complet avant d'être vue.
+    checkCommand(); // une fois par canal, pas seulement une fois par
+                     // balayage (~2.7s) : sinon toute commande/détection
+                     // (y compris MODE:BACKPACK et l'auto-détection '$')
+                     // peut attendre jusqu'à un balayage complet avant
+                     // d'être vue.
     setFrequency(freqTable[i]);
 
     // Traiter les paquets drone pendant le temps de stabilisation PLL

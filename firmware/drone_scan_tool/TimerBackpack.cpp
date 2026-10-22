@@ -26,17 +26,7 @@ static bp_state_e connectionState = bp_starting;
 static uint32_t   bindingStart    = 0;
 static bool       isBinding       = false;
 
-// Persisted to flash (Preferences/NVS), not RTC memory: this board resets
-// the chip's EN pin — clearing RTC memory — whenever *any* serial client
-// simply opens the port or changes its baud rate (confirmed: RotorHazard
-// connecting, or just changing the baud in the web app, did this every
-// time). RTC-memory persistence (survives ESP.restart(), not a real power
-// cycle) looked right in isolation, but on this hardware "a serial client
-// connected" and "the board lost power" are indistinguishable, so it broke
-// the one thing that actually matters: staying in backpack mode long enough
-// for RotorHazard to use it. Flash survives either way — the trade-off is
-// that a real power cycle no longer resets it back to scan mode by itself
-// (switch back explicitly with MODE:SCAN / the web app's button instead).
+// Why flash and not RTC memory: see the longer explanation in TimerBackpack.h.
 void backpackSetPersistedMode(bool backpackMode) {
   Preferences p;
   p.begin("rssi-scan", false);

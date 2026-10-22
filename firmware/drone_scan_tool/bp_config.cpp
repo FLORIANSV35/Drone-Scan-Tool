@@ -38,7 +38,6 @@ void
 TimerBackpackConfig::SetDefaults()
 {
     m_config.version = TIMER_BACKPACK_CONFIG_VERSION | TIMER_BACKPACK_CONFIG_MAGIC;
-    m_config.bootCount = 0;
     memset(m_config.address, 0, 6);
     m_config.phrase[0] = 0;
     m_modified = true;
@@ -57,12 +56,5 @@ TimerBackpackConfig::SetPhrase(const char *phrase)
 {
     strncpy(m_config.phrase, phrase, sizeof(m_config.phrase) - 1);
     m_config.phrase[sizeof(m_config.phrase) - 1] = 0;
-    m_modified = true;
-}
-
-void
-TimerBackpackConfig::SetBootCount(uint8_t count)
-{
-    m_config.bootCount = count;
     m_modified = true;
 }
