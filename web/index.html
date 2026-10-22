@@ -1189,7 +1189,10 @@ async function openAndHello(baud) {
   if (activeStep && parseInt(activeStep.dataset.step) > 0) sendStep(parseInt(activeStep.dataset.step));
   writer.write(`RANGE:${sliderFMin},${sliderFMax}\n`).catch(() => {});
 
-  return await waitForAck(900);
+  // Marge généreuse : le firmware ne vérifie les commandes série qu'une
+  // fois par canal pendant un balayage (quelques dizaines de ms), donc
+  // 900ms suffirait en théorie, mais on garde de la marge pour l'USB/latence.
+  return await waitForAck(1800);
 }
 
 let pendingSerialPrefix = ''; // texte déjà consommé par waitForAck, à ne pas perdre

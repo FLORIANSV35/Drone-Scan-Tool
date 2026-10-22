@@ -778,6 +778,10 @@ void loop() {
   checkCommand();
 
   for (uint16_t i = 0; i < numFreq; i++) {
+    checkCommand(); // pas seulement une fois par balayage (~2.7s) : sinon
+                     // toute commande/détection (y compris MODE:BACKPACK et
+                     // l'auto-détection '$') peut attendre jusqu'à un
+                     // balayage complet avant d'être vue.
     setFrequency(freqTable[i]);
 
     // Traiter les paquets drone pendant le temps de stabilisation PLL
