@@ -573,12 +573,12 @@ void rebuildTable() {
   for (uint16_t i=0; i<numFreq; i++) freqTable[i] = rangeMin + (uint16_t)i * freqStep;
 }
 
-// Bascule persistée + reboot vers le mode Timer Backpack.
+// Bascule + reboot vers le mode Timer Backpack. Mémorisé en RAM RTC (voir
+// TimerBackpack.h) : survit à ce reboot logiciel, mais pas à un vrai
+// débranchage — un power cycle retombe toujours en mode scan.
 void switchToBackpackMode() {
   Serial.println("ACK:MODE=BACKPACK");
-  prefs.begin("rssi-scan", false);
-  prefs.putBool("bpMode", true);
-  prefs.end();
+  backpackSetPersistedMode(true);
   delay(100);
   ESP.restart();
 }
@@ -715,12 +715,12 @@ if (calValid) {
 // ═══════════════════════════════════════════════
 
 void setup() {
-  // Mode persisté (voir MODE:BACKPACK / "MODE:SCAN") — lu avant toute
-  // init scanner/WiFi, car le mode Timer Backpack ne doit rien partager
-  // avec le sniffer WiFi (même radio, jamais utilisés en même temps).
-  prefs.begin("rssi-scan", true);
-  g_backpackMode = prefs.getBool("bpMode", false);
-  prefs.end();
+  // Mode mémorisé en RAM RTC, pas en flash (voir MODE:BACKPACK / "MODE:SCAN"
+  // et TimerBackpack.h) — lu avant toute init scanner/WiFi, car le mode
+  // Timer Backpack ne doit rien partager avec le sniffer WiFi (même radio,
+  // jamais utilisés en même temps). Un vrai débranchage efface la RAM RTC :
+  // on retombe alors toujours en mode scan, par choix.
+  g_backpackMode = backpackGetPersistedMode();
   if (g_backpackMode) {
     backpackSetup();
     return;

@@ -41,3 +41,12 @@ const char *backpackGetPhrase();
 // address sent by the next peer it hears from while binding. Also reachable
 // with a short press of the BOOT button (GPIO0) while in backpack mode.
 void backpackEnterBinding();
+
+// Which mode to boot into, remembered in RTC memory (not flash): it
+// survives a software reboot (ESP.restart(), used by MODE:BACKPACK /
+// MODE:SCAN to actually switch), but is lost on a real power cycle — so
+// unplugging and replugging the board always comes back up in scan mode,
+// on purpose, with no dependency on NVS (which has caused real corruption
+// on this board's small flash partition when written to too often).
+void backpackSetPersistedMode(bool backpackMode);
+bool backpackGetPersistedMode();

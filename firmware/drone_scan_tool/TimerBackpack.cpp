@@ -7,7 +7,6 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include <MD5Builder.h>
-#include <Preferences.h>
 
 #include "TimerBackpack.h"
 #include "config.h"
@@ -25,6 +24,25 @@ typedef enum { bp_starting, bp_binding, bp_running } bp_state_e;
 static bp_state_e connectionState = bp_starting;
 static uint32_t   bindingStart    = 0;
 static bool       isBinding       = false;
+
+// RTC "noinit" memory: keeps its value across ESP.restart() (unlike plain
+// RTC_DATA_ATTR, which only survives deep sleep), but — same as any RTC
+// memory — isn't backed by anything once VDD_RTC itself loses power, so a
+// real unplug/replug always comes back up in scan mode, on purpose. It also
+// isn't zero-initialized on a cold boot (could hold anything left over at
+// power-up), hence the magic-value guard: only trust it once we've written
+// it ourselves. See TimerBackpack.h for why this isn't a Preferences key.
+#define RTC_MODE_MAGIC 0x5A5AA5A5u
+RTC_NOINIT_ATTR static uint32_t rtcModeMagic;
+RTC_NOINIT_ATTR static bool     rtcBackpackMode;
+
+void backpackSetPersistedMode(bool backpackMode) {
+  rtcModeMagic = RTC_MODE_MAGIC;
+  rtcBackpackMode = backpackMode;
+}
+bool backpackGetPersistedMode() {
+  return (rtcModeMagic == RTC_MODE_MAGIC) && rtcBackpackMode;
+}
 
 static ELRS_EEPROM eeprom;
 static bool         storageReady = false;
@@ -115,10 +133,7 @@ static bool looksLikeScanModeCommand(const char *line) {
 
 static void exitToScanMode() {
   Serial.println("ACK:MODE=SCAN");
-  Preferences p;
-  p.begin("rssi-scan", false);
-  p.putBool("bpMode", false);
-  p.end();
+  backpackSetPersistedMode(false);
   delay(100);
   ESP.restart();
 }
