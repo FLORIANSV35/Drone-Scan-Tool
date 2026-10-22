@@ -1194,6 +1194,9 @@ async function openAndHello(baud) {
 
 let pendingSerialPrefix = ''; // texte déjà consommé par waitForAck, à ne pas perdre
 
+// Retourne {ok, text} : `text` est ce qui a été lu avant de matcher
+// ACK:/BOOT:, pour que connect() puisse voir SI la réponse annonce un
+// changement de mode (ACK:MODE=...) et donc un reboot imminent côté ESP.
 async function waitForAck(timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let buf = '';
@@ -1212,7 +1215,7 @@ async function waitForAck(timeoutMs) {
     if (/ACK:|BOOT:/.test(buf)) { ok = true; break; }
   }
   if (ok) pendingSerialPrefix = buf; // remis dans le flux normal par startReading()
-  return ok;
+  return { ok, text: buf };
 }
 
 async function connect() {
@@ -1229,12 +1232,28 @@ async function connect() {
     const chosenBaud = +document.getElementById('sel-baud').value;
     const otherBaud = chosenBaud === 115200 ? 460800 : 115200;
 
-    let ok = await openAndHello(chosenBaud);
+    let { ok, text } = await openAndHello(chosenBaud);
     if (!ok) {
       setStatus('connecting', `Pas de réponse à ${chosenBaud} bauds, essai à ${otherBaud}…`);
       await closeSerial(port); // ferme reader/writer/port sans toucher la variable `port`
-      ok = await openAndHello(otherBaud);
+      ({ ok, text } = await openAndHello(otherBaud));
       if (ok) document.getElementById('sel-baud').value = String(otherBaud);
+    }
+
+    // SCANAPP:HELLO peut avoir fait basculer l'ESP (il répond ACK:MODE=SCAN
+    // quand il était resté en mode backpack) — il reboote alors tout de
+    // suite au débit scan (115200), donc ce qu'on vient de lire ici devient
+    // obsolète : on rouvre directement au bon débit plutôt que d'afficher
+    // "Connecté" sur une liaison qui va tomber dans l'instant.
+    if (ok && /ACK:MODE=SCAN/.test(text)) {
+      pendingSerialPrefix = '';
+      await reconnectAtBaud(115200);
+      return;
+    }
+    if (ok && /ACK:MODE=BACKPACK/.test(text)) {
+      pendingSerialPrefix = '';
+      await reconnectAtBaud(460800);
+      return;
     }
 
     btnCon.textContent = '◉ DÉCONNECTER'; btnCon.classList.add('disc');
