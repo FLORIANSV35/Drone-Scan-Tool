@@ -260,11 +260,17 @@ static void adoptGroupAddress(const uint8_t *addr) {
 }
 
 static void SendVersionResponse() {
+  // The real ExpressLRS Backpack reports this as an ASCII version string
+  // (confirmed by capturing a genuine backpack's reply: "1.5.5", not 3
+  // binary bytes) — RotorHazard's VRxC_ELRS plugin parses it as text to
+  // check against its minimum supported version, so sending raw bytes here
+  // silently fails that check (no crash, just never shows a version).
+  static const char version[] = "1.5.5";
   mspPacket_t out;
   out.reset();
   out.makeResponse();
   out.function = MSP_ELRS_GET_BACKPACK_VERSION;
-  out.addByte(1); out.addByte(0); out.addByte(0); // report as backpack protocol v1.0.0
+  for (size_t i = 0; i < sizeof(version) - 1; i++) out.addByte((uint8_t)version[i]);
   msp.sendPacket(&out, &Serial);
 }
 
