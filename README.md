@@ -9,6 +9,8 @@ The ESP32-S3 does two things in parallel:
 
 A web app (Web Serial) displays the spectrum and a map of detected drones, and can flash the firmware from the browser.
 
+The same ESP32-S3 board can also be reflashed as a **RotorHazard Timer Backpack** for race timing — see [below](#rotorhazard-timer-backpack-mode). That's a separate firmware, not a mode of this sketch, so the board runs either the scanner or the timer backpack, never both at once.
+
 ## Repository layout
 
 ```
@@ -86,6 +88,27 @@ Supported commands:
 > ⚠️ **EU Remote ID detection is not reliable yet.** Some beacons may be missed or decoded incorrectly.
 
 The sniffer listens on a single Wi-Fi channel at a time (channel 6 by default, configurable via `WIFI_SNIFFER_CHANNEL`), so it only sees beacons transmitted on that channel.
+
+## RotorHazard Timer Backpack mode
+
+This ESP32-S3 board can double as a **RotorHazard Timer Backpack** for race timing — but as a completely separate firmware, not a feature of this sketch. It's the official [ExpressLRS Backpack](https://github.com/ExpressLRS/Backpack) firmware, built by the ExpressLRS project itself, not code from this repository.
+
+In that role, the board:
+
+- Connects to the RotorHazard server over USB serial (via RotorHazard's [VRxC_ELRS plugin](https://github.com/i-am-grub/VRxC_ELRS), RotorHazard v4.1.0+, backpack firmware 1.5.0+).
+- Talks to pilots' VRx backpacks over ESP-NOW (shared bind phrase) to show race stage, start, lap results, positions and gap times on their goggles' OSD. Currently only HDZero goggles with a built-in backpack are supported.
+- Optionally lets the race director start/stop races from their transmitter's `DVR Rec` switch.
+
+To flash it:
+
+1. Install the [ExpressLRS Configurator](https://expresslrs.org) (desktop app).
+2. Open the Backpack tab, pick the latest release, device category **RotorHazard**, firmware **Race Timer**, target **ESP32-S3 Module (DIY)**.
+3. Set a bind phrase (shared with the pilots' VRx backpacks) and flashing method **UART**.
+4. Connect the board over USB and flash.
+
+If the Configurator's UART flashing doesn't work for your board, a prebuilt binary is also available from the [Backpack releases page](https://github.com/ExpressLRS/Backpack/releases) and can be flashed with `esptool`.
+
+The RX5808 wiring is unused in this mode and can stay connected — it's harmless. To switch back to spectrum scanning / drone sniffing, just reflash the board with `firmware/drone_scan_tool/drone_scan_tool.ino` as described [above](#flashing-the-firmware).
 
 ## Disclaimer
 
