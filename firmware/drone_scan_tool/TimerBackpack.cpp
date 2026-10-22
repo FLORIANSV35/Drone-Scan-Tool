@@ -178,6 +178,21 @@ static void registerPeer(const uint8_t *address) {
   esp_now_add_peer(&peerInfo);
 }
 
+// Adopt a group address received (over Serial or ESP-NOW) while binding.
+static void adoptGroupAddress(const uint8_t *addr) {
+  memcpy(groupAddress, addr, 6);
+  memcpy(sendAddress, groupAddress, 6);
+  bpConfig.SetGroupAddress(groupAddress);
+  bpConfig.Commit();
+  SetSoftMACAddress();
+  registerPeer(groupAddress);
+  connectionState = bp_running;
+  isBinding = false;
+  Serial.printf("ACK:BIND=OK,UID=%02X%02X%02X%02X%02X%02X\n",
+                groupAddress[0], groupAddress[1], groupAddress[2],
+                groupAddress[3], groupAddress[4], groupAddress[5]);
+}
+
 static void SendVersionResponse() {
   mspPacket_t out;
   out.reset();
@@ -199,16 +214,7 @@ static int sendMSPViaEspnow(mspPacket_t *packet) {
 // A packet arrived from RotorHazard over Serial (USB), headed for the peer.
 static void ProcessMSPPacketFromTimer(mspPacket_t *packet) {
   if (connectionState == bp_binding) {
-    if (packet->function == MSP_ELRS_BIND) {
-      memcpy(groupAddress, packet->payload, 6);
-      memcpy(sendAddress, groupAddress, 6);
-      bpConfig.SetGroupAddress(groupAddress);
-      bpConfig.Commit();
-      SetSoftMACAddress();
-      registerPeer(groupAddress);
-      connectionState = bp_running;
-      isBinding = false;
-    }
+    if (packet->function == MSP_ELRS_BIND) adoptGroupAddress(packet->payload);
     return;
   }
 
@@ -241,16 +247,7 @@ static void ProcessMSPPacketFromTimer(mspPacket_t *packet) {
 // A packet arrived from a peer over ESP-NOW, headed for RotorHazard.
 static void ProcessMSPPacketFromPeer(mspPacket_t *packet) {
   if (connectionState == bp_binding) {
-    if (packet->function == MSP_ELRS_BIND) {
-      memcpy(groupAddress, packet->payload, 6);
-      memcpy(sendAddress, groupAddress, 6);
-      bpConfig.SetGroupAddress(groupAddress);
-      bpConfig.Commit();
-      SetSoftMACAddress();
-      registerPeer(groupAddress);
-      connectionState = bp_running;
-      isBinding = false;
-    }
+    if (packet->function == MSP_ELRS_BIND) adoptGroupAddress(packet->payload);
     return;
   }
 
@@ -347,13 +344,15 @@ void backpackLoop() {
       (now - bindingStart) > BINDING_NO_PEER_TIMEOUT) {
     connectionState = bp_running;
     isBinding = false;
+    Serial.println("ACK:BIND=TIMEOUT");
   }
 
-  // Read Serial: feed the MSP parser, and in parallel watch for the plain
-  // text "MODE:SCAN" line (a human/our web app typing it, as opposed to the
+  // Read Serial: feed the MSP parser, and in parallel watch for plain text
+  // command lines (a human/our web app typing them, as opposed to the
   // binary MSP frames RotorHazard sends). The two never collide: MSP frames
-  // always start with '$','X', which "MODE:SCAN" never contains.
-  static char lineBuf[16];
+  // always start with '$','X', which these lines never contain. This lets
+  // you drive the mode entirely from serial, with no physical button needed.
+  static char lineBuf[20];
   static uint8_t lineLen = 0;
 
   while (Serial.available()) {
@@ -368,6 +367,10 @@ void backpackLoop() {
       if (lineLen > 0) {
         lineBuf[lineLen] = '\0';
         if (strcmp(lineBuf, "MODE:SCAN") == 0) exitToScanMode();
+        else if (strcmp(lineBuf, "BACKPACK:BIND") == 0) {
+          backpackEnterBinding();
+          Serial.println("ACK:BIND=WAITING");
+        }
         lineLen = 0;
       }
     } else if (lineLen < sizeof(lineBuf) - 1) {

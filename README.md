@@ -117,17 +117,20 @@ Real ExpressLRS/RotorHazard backpacks pair by sharing a **binding phrase**: both
 1. While still in scan mode, send `BACKPACK:PHRASE:<your phrase>` over serial. The device replies with the resulting group address (`ACK:PHRASE=<12 hex digits>`) — use it to double-check both ends match.
 2. Send `MODE:BACKPACK` to switch over (reboots at 460800 baud).
 
-Alternatively, pair interactively without knowing a phrase: put both devices into binding mode (a short tap of the BOOT button on this board, or the `MSP_ELRS_BACKPACK_SET_MODE 'B'` command from RotorHazard) and they'll adopt each other's address — the same fallback the official firmware uses when no phrase was pre-flashed.
+Alternatively, pair interactively without knowing a phrase: put both devices into binding mode (send `BACKPACK:BIND` over serial, or the `MSP_ELRS_BACKPACK_SET_MODE 'B'` command from RotorHazard) and they'll adopt each other's address — the same fallback the official firmware uses when no phrase was pre-flashed. The device replies `ACK:BIND=OK,UID=...` once paired, or `ACK:BIND=TIMEOUT` after 2 minutes with no peer.
 
 ### Controls in this mode
 
+Everything is reachable over serial alone, no physical button needed:
+
 | Action                          | Effect                                   |
 |----------------------------------|-------------------------------------------|
-| BOOT button, short press         | Enter binding mode                        |
-| BOOT button, hold 1.5 s          | Switch back to scan mode and reboot       |
+| Send `BACKPACK:BIND` over serial | Enter binding mode                        |
 | Send `MODE:SCAN` over serial     | Switch back to scan mode and reboot       |
-| Status LED fast blink            | Binding mode                              |
+| Status LED fast blink            | Binding mode (if you have visual access to it) |
 | Status LED brief blip            | ESP-NOW activity                          |
+
+If the board's BOOT button (GPIO 0) happens to be reachable, a short press does the same as `BACKPACK:BIND`, and holding it 1.5 s does the same as `MODE:SCAN` — purely a convenience, never required.
 
 The RX5808 wiring is unused in this mode — leaving it connected is harmless.
 
