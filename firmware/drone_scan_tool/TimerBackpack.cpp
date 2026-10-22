@@ -7,6 +7,7 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include <MD5Builder.h>
+#include <Preferences.h>
 
 #include "TimerBackpack.h"
 #include "config.h"
@@ -25,23 +26,29 @@ static bp_state_e connectionState = bp_starting;
 static uint32_t   bindingStart    = 0;
 static bool       isBinding       = false;
 
-// RTC "noinit" memory: keeps its value across ESP.restart() (unlike plain
-// RTC_DATA_ATTR, which only survives deep sleep), but — same as any RTC
-// memory — isn't backed by anything once VDD_RTC itself loses power, so a
-// real unplug/replug always comes back up in scan mode, on purpose. It also
-// isn't zero-initialized on a cold boot (could hold anything left over at
-// power-up), hence the magic-value guard: only trust it once we've written
-// it ourselves. See TimerBackpack.h for why this isn't a Preferences key.
-#define RTC_MODE_MAGIC 0x5A5AA5A5u
-RTC_NOINIT_ATTR static uint32_t rtcModeMagic;
-RTC_NOINIT_ATTR static bool     rtcBackpackMode;
-
+// Persisted to flash (Preferences/NVS), not RTC memory: this board resets
+// the chip's EN pin — clearing RTC memory — whenever *any* serial client
+// simply opens the port or changes its baud rate (confirmed: RotorHazard
+// connecting, or just changing the baud in the web app, did this every
+// time). RTC-memory persistence (survives ESP.restart(), not a real power
+// cycle) looked right in isolation, but on this hardware "a serial client
+// connected" and "the board lost power" are indistinguishable, so it broke
+// the one thing that actually matters: staying in backpack mode long enough
+// for RotorHazard to use it. Flash survives either way — the trade-off is
+// that a real power cycle no longer resets it back to scan mode by itself
+// (switch back explicitly with MODE:SCAN / the web app's button instead).
 void backpackSetPersistedMode(bool backpackMode) {
-  rtcModeMagic = RTC_MODE_MAGIC;
-  rtcBackpackMode = backpackMode;
+  Preferences p;
+  p.begin("rssi-scan", false);
+  p.putBool("bpMode", backpackMode);
+  p.end();
 }
 bool backpackGetPersistedMode() {
-  return (rtcModeMagic == RTC_MODE_MAGIC) && rtcBackpackMode;
+  Preferences p;
+  p.begin("rssi-scan", true);
+  bool on = p.getBool("bpMode", false);
+  p.end();
+  return on;
 }
 
 static ELRS_EEPROM eeprom;

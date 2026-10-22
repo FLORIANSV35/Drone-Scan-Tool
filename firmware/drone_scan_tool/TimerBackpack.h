@@ -42,11 +42,11 @@ const char *backpackGetPhrase();
 // with a short press of the BOOT button (GPIO0) while in backpack mode.
 void backpackEnterBinding();
 
-// Which mode to boot into, remembered in RTC memory (not flash): it
-// survives a software reboot (ESP.restart(), used by MODE:BACKPACK /
-// MODE:SCAN to actually switch), but is lost on a real power cycle — so
-// unplugging and replugging the board always comes back up in scan mode,
-// on purpose, with no dependency on NVS (which has caused real corruption
-// on this board's small flash partition when written to too often).
+// Which mode to boot into, persisted to flash (Preferences/NVS). Survives
+// everything, including a real power cycle — necessary on this board,
+// since merely opening the serial port (what RotorHazard does) or
+// changing its baud rate resets the chip's EN pin, which would clear any
+// RTC-memory-only flag. Switch back explicitly (MODE:SCAN / the web app's
+// button) rather than relying on a power cycle to reset it.
 void backpackSetPersistedMode(bool backpackMode);
 bool backpackGetPersistedMode();
