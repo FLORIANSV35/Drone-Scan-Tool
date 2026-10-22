@@ -1048,8 +1048,9 @@
       <button id="btn-bp-phrase">1 · Définir la phrase (BACKPACK:PHRASE:…)</button>
       <button id="btn-bp-switch">2 · Basculer en mode Backpack (reboot)</button>
       <div id="backpack-note">
-        Après bascule, l'ESP redémarre à <strong>460800 bauds</strong> :
-        déconnectez puis reconnectez-vous ci-dessus en choisissant ce débit.
+        Après bascule, l'ESP redémarre à <strong>460800 bauds</strong> — la
+        reconnexion à ce débit se fait automatiquement, inutile de toucher
+        au menu Baud.
       </div>
 
       <button id="btn-bp-bind">Entrer en mode binding (sans phrase)</button>
@@ -3183,12 +3184,46 @@ document.getElementById('btn-bp-phrase').addEventListener('click', async () => {
   await bpSend('BACKPACK:PHRASE:' + phrase);
 });
 
+// L'ESP reboote au nouveau débit après un changement de mode — sur cette
+// carte (UART réel via pont, pas de l'USB natif), le débit compte vraiment,
+// donc on referme et rouvre le MÊME port à son nouveau débit automatiquement
+// plutôt que de laisser l'utilisateur changer le menu Baud et recliquer.
+async function reconnectAtBaud(baud) {
+  const p = port;
+  if (reader) { try { await reader.cancel(); } catch(_) {} reader = null; }
+  if (writer) { try { await writer.close(); } catch(_) {} writer = null; }
+  if (p) { try { await p.close(); } catch(_) {} }
+
+  setStatus('connecting', 'Redémarrage de l\'ESP…');
+  await new Promise(r => setTimeout(r, 1300)); // laisser l'ESP rebooter
+
+  try {
+    await p.open({ baudRate: baud });
+    port = p;
+    document.getElementById('sel-baud').value = String(baud);
+
+    const dec = new TextDecoderStream();
+    p.readable.pipeTo(dec.writable);
+    reader = dec.readable.getReader();
+
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(p.writable);
+    writer = enc.writable.getWriter();
+
+    setStatus('connected', 'Connecté');
+    btnCon.textContent = '◉ DÉCONNECTER'; btnCon.classList.add('disc');
+    startReading();
+  } catch(e) {
+    port = null; writer = null;
+    setStatus('error', 'Reconnexion: ' + e.message);
+    btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
+  }
+}
+
 document.getElementById('btn-bp-switch').addEventListener('click', async () => {
   if (await bpSend('MODE:BACKPACK')) {
     document.getElementById('backpack-overlay').style.display = 'none';
-    // L'ESP redémarre à 460800 bauds : la connexion actuelle (115200) va
-    // tomber d'elle-même ; on la referme proprement côté navigateur.
-    setTimeout(disconnect, 400);
+    reconnectAtBaud(460800);
   }
 });
 
@@ -3197,7 +3232,7 @@ document.getElementById('btn-bp-bind').addEventListener('click', () => bpSend('B
 document.getElementById('btn-bp-scan').addEventListener('click', async () => {
   if (await bpSend('MODE:SCAN')) {
     document.getElementById('backpack-overlay').style.display = 'none';
-    setTimeout(disconnect, 400);
+    reconnectAtBaud(115200);
   }
 });
 
