@@ -40,6 +40,7 @@ TimerBackpackConfig::SetDefaults()
     m_config.version = TIMER_BACKPACK_CONFIG_VERSION | TIMER_BACKPACK_CONFIG_MAGIC;
     m_config.bootCount = 0;
     memset(m_config.address, 0, 6);
+    m_config.phrase[0] = 0;
     m_modified = true;
     Commit();
 }
@@ -48,6 +49,14 @@ void
 TimerBackpackConfig::SetGroupAddress(const uint8_t address[6])
 {
     memcpy(m_config.address, address, 6);
+    m_modified = true;
+}
+
+void
+TimerBackpackConfig::SetPhrase(const char *phrase)
+{
+    strncpy(m_config.phrase, phrase, sizeof(m_config.phrase) - 1);
+    m_config.phrase[sizeof(m_config.phrase) - 1] = 0;
     m_modified = true;
 }
 

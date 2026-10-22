@@ -92,6 +92,7 @@ Supported commands:
 | `FOCUS:OFF`     | Back to normal scan                    |
 | `DIAG`          | RSSI diagnostic                        |
 | `BACKPACK:PHRASE:<text>` | Set the Timer Backpack binding phrase (see below) |
+| `BACKPACK:PHRASE?` | Read back the binding phrase stored on this ESP |
 | `MODE:BACKPACK` | Switch into Timer Backpack mode and reboot |
 
 ## Supported drone protocols
@@ -129,7 +130,7 @@ So in practice: plug the board into RotorHazard and it becomes a Timer Backpack;
 
 Real ExpressLRS/RotorHazard backpacks pair by sharing a **binding phrase**: both ends hash it into the same ESP-NOW group address. This firmware computes that hash the same way the ExpressLRS Configurator does, so it pairs with any officially-built backpack (e.g. HDZero goggles) given the same phrase:
 
-1. While still in scan mode, send `BACKPACK:PHRASE:<your phrase>` over serial. The device replies with the resulting group address (`ACK:PHRASE=<12 hex digits>`) — use it to double-check both ends match.
+1. While still in scan mode, send `BACKPACK:PHRASE:<your phrase>` over serial. The phrase itself is stored on the ESP (not just the address derived from it), so it survives reboots and can be read back later with `BACKPACK:PHRASE?` — the device replies to either with `ACK:PHRASE=<phrase>,UID=<12 hex digits>` (or just `ACK:PHRASE=<phrase>` for a plain read), so you can double-check both ends match. The web app's Timer Backpack panel does this automatically: it asks the ESP for its stored phrase every time you open the panel, rather than relying on anything remembered in the browser.
 2. Send `MODE:BACKPACK` to switch over (reboots at 460800 baud).
 
 Alternatively, pair interactively without knowing a phrase: put both devices into binding mode (send `BACKPACK:BIND` over serial, or the `MSP_ELRS_BACKPACK_SET_MODE 'B'` command from RotorHazard) and they'll adopt each other's address — the same fallback the official firmware uses when no phrase was pre-flashed. The device replies `ACK:BIND=OK,UID=...` once paired, or `ACK:BIND=TIMEOUT` after 2 minutes with no peer.

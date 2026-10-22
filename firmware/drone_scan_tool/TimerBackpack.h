@@ -32,6 +32,11 @@ void backpackLoop();
 // ExpressLRS Configurator. Can be called from scan mode, before switching.
 void backpackSetPhrase(const char *phrase);
 
+// Reads back the phrase last set with backpackSetPhrase(), from the ESP's
+// own storage (empty string if none was ever set). The group address alone
+// can't be reversed back into it, which is why it's kept separately.
+const char *backpackGetPhrase();
+
 // Puts the backpack into ESP-NOW binding mode: it will adopt the group
 // address sent by the next peer it hears from while binding. Also reachable
 // with a short press of the BOOT button (GPIO0) while in backpack mode.

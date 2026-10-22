@@ -20,7 +20,8 @@
  *   FOCUS:XXXX        → mode focus bandes
  *   FOCUS:OFF         → scan normal
  *   DIAG              → diagnostic RSSI
- *   BACKPACK:PHRASE:<texte> → bind phrase du mode Timer Backpack (voir plus bas)
+ *   BACKPACK:PHRASE:<texte> → définit la bind phrase (stockée sur l'ESP, voir plus bas)
+ *   BACKPACK:PHRASE?  → relit la bind phrase stockée sur l'ESP
  *   MODE:BACKPACK     → bascule en mode RotorHazard Timer Backpack (reboot)
  *   SCANAPP:HELLO     → envoyé par l'appli web à la connexion (auto-détection)
  *
@@ -648,6 +649,9 @@ void handleCommand(const char* cmd) {
   }
   if (strncmp(cmd,"BACKPACK:PHRASE:",16)==0) {
     backpackSetPhrase(cmd+16); return;
+  }
+  if (strcmp(cmd,"BACKPACK:PHRASE?")==0) {
+    Serial.print("ACK:PHRASE="); Serial.println(backpackGetPhrase()); return;
   }
   if (strcmp(cmd,"MODE:BACKPACK")==0) { switchToBackpackMode(); }
   // Marqueur envoyé par l'appli web juste après connexion — sert surtout à

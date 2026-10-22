@@ -75,11 +75,20 @@ void backpackSetPhrase(const char *phrase) {
   memcpy(groupAddress, digest, 6);
   memcpy(sendAddress, groupAddress, 6);
   bpConfig.SetGroupAddress(groupAddress);
+  bpConfig.SetPhrase(phrase); // kept only so it can be read back later (backpackGetPhrase)
   bpConfig.Commit();
 
-  Serial.printf("ACK:PHRASE=%02X%02X%02X%02X%02X%02X\n",
+  Serial.printf("ACK:PHRASE=%s,UID=%02X%02X%02X%02X%02X%02X\n",
+                bpConfig.GetPhrase(),
                 groupAddress[0], groupAddress[1], groupAddress[2],
                 groupAddress[3], groupAddress[4], groupAddress[5]);
+}
+
+// Reads back whatever phrase was last set with backpackSetPhrase(), straight
+// from the ESP's own storage — the UID alone can't be reversed into it.
+const char *backpackGetPhrase() {
+  ensureStorage();
+  return bpConfig.GetPhrase();
 }
 
 // The web app sends this exact line right after connecting, specifically

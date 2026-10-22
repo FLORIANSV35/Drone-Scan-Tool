@@ -1294,6 +1294,14 @@ async function startReading() {
             data = data.filter(d => d.freq >= sliderFMin && d.freq <= sliderFMax);
             dataMap.clear(); data.forEach(d => dataMap.set(d.freq, d));
           }
+          // ACK:PHRASE=<phrase> (requête) ou ACK:PHRASE=<phrase>,UID=... (définition)
+          // — c'est l'ESP qui a autorité sur la phrase, pas le navigateur.
+          if (line.startsWith('ACK:PHRASE=')) {
+            const phrase = line.slice('ACK:PHRASE='.length).split(',UID=')[0];
+            const input = document.getElementById('backpack-phrase-input');
+            if (input) input.value = phrase;
+            try { localStorage.setItem('bpPhrase', phrase); } catch(_) {}
+          }
         } else if (line.startsWith('DIAG:')) {
           handleDiag(line.slice(5));
         } else if (line.startsWith('{')) {
@@ -3220,6 +3228,9 @@ document.getElementById('btn-flash-close').addEventListener('click', () => {
 document.getElementById('btn-backpack-open').addEventListener('click', () => {
   document.getElementById('backpack-overlay').style.display = 'flex';
   document.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+  // Demande à l'ESP la phrase qu'il a réellement en mémoire (autorité sur
+  // la valeur affichée) — la réponse ACK:PHRASE=... remplit le champ.
+  bpSend('BACKPACK:PHRASE?');
 });
 document.getElementById('btn-bp-close').addEventListener('click', () => {
   document.getElementById('backpack-overlay').style.display = 'none';
