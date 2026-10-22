@@ -791,6 +791,44 @@
   #btn-flash-close:hover { background: var(--sf); border-color: #9ca3af; }
   .flash-error { color: #991b1b !important; }
   .flash-ok    { color: #166534 !important; }
+
+  /* ─── Backpack overlay ──────────────────────────────────── */
+  #backpack-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15,23,42,.45);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #backpack-panel {
+    background: var(--sf); border: 1px solid var(--bd1);
+    border-radius: var(--r2); padding: 24px 28px; width: 380px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.15);
+    font-family: 'Courier New', monospace; color: var(--tx1);
+  }
+  #backpack-header { font-size: 14px; color: var(--acc); letter-spacing: 1.5px; font-weight: 700; margin-bottom: 4px; }
+  #backpack-sub { font-size: 11px; color: var(--tx3); margin-bottom: 16px; line-height: 1.6; }
+  #backpack-phrase-input {
+    width: 100%; height: 34px; padding: 0 10px; margin-bottom: 10px;
+    border: 1px solid var(--bd1); border-radius: var(--r);
+    background: var(--sf); color: var(--tx1);
+    font-size: 12px; font-family: 'Courier New', monospace;
+    outline: none; box-sizing: border-box;
+  }
+  #backpack-panel button {
+    width: 100%; height: 38px; margin-bottom: 8px;
+    border-radius: var(--r); border: 1.5px solid var(--bd1);
+    background: var(--sf2); color: var(--tx2);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: 'Courier New', monospace; letter-spacing: .5px;
+    transition: all .15s;
+  }
+  #btn-bp-phrase  { background: #eff6ff; border-color: #93c5fd; color: var(--acc); }
+  #btn-bp-switch  { background: #fefce8; border-color: #fde68a; color: #78350f; }
+  #btn-bp-bind    { background: #dcfce7; border-color: #86efac; color: #166534; }
+  #btn-bp-scan    { background: #fefce8; border-color: #fde68a; color: #78350f; }
+  #btn-bp-close   { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+  #backpack-panel button:disabled { opacity: .3; cursor: default; }
+  #backpack-note { font-size: 10px; color: var(--tx3); margin: 2px 0 14px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -809,6 +847,7 @@
   <span class="hdr-label">Baud</span>
   <select id="sel-baud">
     <option value="115200" selected>115200</option>
+    <option value="460800">460800 (Timer Backpack)</option>
     <option value="57600">57600</option>
     <option value="9600">9600</option>
   </select>
@@ -871,6 +910,7 @@
     <div class="dropdown-menu">
       <button id="btn-diag">⚙ Diagnostic RSSI</button>
       <button id="btn-flash-open">⬆ Mettre à jour firmware</button>
+      <button id="btn-backpack-open">📡 Mode Timer Backpack</button>
       <div class="dd-div"></div>
       <button id="btn-buzzer-web">🔊 Bip web</button>
       <div class="dd-div"></div>
@@ -992,6 +1032,29 @@
         <button id="btn-flash-start">⚡ Flasher</button>
         <button id="btn-flash-close">✕ Fermer</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ── Backpack overlay ──────────────────────────────── -->
+  <div id="backpack-overlay" style="display:none;">
+    <div id="backpack-panel">
+      <div id="backpack-header">📡 MODE TIMER BACKPACK</div>
+      <div id="backpack-sub">
+        Pont série ⇄ ESP-NOW vers RotorHazard. Ce mode tourne à part du
+        scan (reboot requis pour y entrer/en sortir).
+      </div>
+
+      <input id="backpack-phrase-input" type="text" placeholder="Bind phrase (ex: mon équipe 2026)">
+      <button id="btn-bp-phrase">1 · Définir la phrase (BACKPACK:PHRASE:…)</button>
+      <button id="btn-bp-switch">2 · Basculer en mode Backpack (reboot)</button>
+      <div id="backpack-note">
+        Après bascule, l'ESP redémarre à <strong>460800 bauds</strong> :
+        déconnectez puis reconnectez-vous ci-dessus en choisissant ce débit.
+      </div>
+
+      <button id="btn-bp-bind">Entrer en mode binding (sans phrase)</button>
+      <button id="btn-bp-scan">Revenir en mode scan (reboot, 115200 bauds)</button>
+      <button id="btn-bp-close">✕ Fermer</button>
     </div>
   </div>
 
@@ -3092,6 +3155,45 @@ document.getElementById('btn-flash-open').addEventListener('click', () => {
 });
 document.getElementById('btn-flash-close').addEventListener('click', () => {
   document.getElementById('flash-overlay').style.display = 'none';
+});
+
+// ── Mode Timer Backpack ─────────────────────────────────────
+document.getElementById('btn-backpack-open').addEventListener('click', () => {
+  document.getElementById('backpack-overlay').style.display = 'flex';
+  document.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+});
+document.getElementById('btn-bp-close').addEventListener('click', () => {
+  document.getElementById('backpack-overlay').style.display = 'none';
+});
+
+async function bpSend(cmd) {
+  if (!writer) { setStatus('error', 'Connectez-vous d\'abord (bouton CONNECTER)'); return false; }
+  try { await writer.write(cmd + '\n'); return true; }
+  catch(e) { setStatus('error', 'Envoi: ' + e.message); return false; }
+}
+
+document.getElementById('btn-bp-phrase').addEventListener('click', async () => {
+  const phrase = document.getElementById('backpack-phrase-input').value.trim();
+  if (!phrase) { setStatus('error', 'Entrez une bind phrase'); return; }
+  await bpSend('BACKPACK:PHRASE:' + phrase);
+});
+
+document.getElementById('btn-bp-switch').addEventListener('click', async () => {
+  if (await bpSend('MODE:BACKPACK')) {
+    document.getElementById('backpack-overlay').style.display = 'none';
+    // L'ESP redémarre à 460800 bauds : la connexion actuelle (115200) va
+    // tomber d'elle-même ; on la referme proprement côté navigateur.
+    setTimeout(disconnect, 400);
+  }
+});
+
+document.getElementById('btn-bp-bind').addEventListener('click', () => bpSend('BACKPACK:BIND'));
+
+document.getElementById('btn-bp-scan').addEventListener('click', async () => {
+  if (await bpSend('MODE:SCAN')) {
+    document.getElementById('backpack-overlay').style.display = 'none';
+    setTimeout(disconnect, 400);
+  }
 });
 
 // Affichage nom de fichier sélectionné
