@@ -83,6 +83,7 @@ static void applyPhrase(const char *phrase) {
   md5.getBytes(digest);
 
   memcpy(groupAddress, digest, 6);
+  groupAddress[0] &= ~0x01; // must stay a valid unicast MAC — see note at OnDataRecv
   memcpy(sendAddress, groupAddress, 6);
   bpConfig.SetGroupAddress(groupAddress);
   bpConfig.SetPhrase(phrase); // kept only so it can be read back later (backpackGetPhrase)
@@ -102,6 +103,7 @@ static void ensureStorage() {
   }
 
   memcpy(groupAddress, bpConfig.GetGroupAddress(), 6);
+  groupAddress[0] &= ~0x01; // re-mask in case this was stored before the fix below existed
   memcpy(sendAddress, groupAddress, 6);
   storageReady = true;
 }
@@ -213,15 +215,22 @@ static void buttonUpdate(uint32_t now) {
 //  ESP-NOW plumbing
 // ═══════════════════════════════════════════════
 
+// groupAddress is always already masked to a valid unicast MAC (first byte's
+// LSB cleared) by whoever last set it — see the three call sites above —
+// so OnDataRecv's memcmp(mac_addr, groupAddress, ...) compares against the
+// exact same value this device's radio actually uses, matching what a peer
+// (radio backpack, goggles) that derives the same masked address would send.
 static void SetSoftMACAddress() {
   WiFi.mode(WIFI_STA);
+  // Pin a known channel explicitly: this chip is the only thing in the
+  // ELRS backpack ecosystem that also runs Wi-Fi in a different role
+  // (the drone sniffer, fixed to WIFI_SNIFFER_CHANNEL in scan mode) — ESP-
+  // NOW only delivers between peers on the *same* channel, so leaving this
+  // to whatever the radio happened to default to is asking for a silent
+  // mismatch with a peer that assumes the usual channel 1.
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
-
-  uint8_t mac[6];
-  memcpy(mac, groupAddress, 6);
-  mac[0] &= ~0x01; // must be a unicast address (even first byte) to be settable
-
-  esp_wifi_set_mac(WIFI_IF_STA, mac);
+  esp_wifi_set_mac(WIFI_IF_STA, groupAddress);
   esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
 }
 
@@ -237,6 +246,7 @@ static void registerPeer(const uint8_t *address) {
 // Adopt a group address received (over Serial or ESP-NOW) while binding.
 static void adoptGroupAddress(const uint8_t *addr) {
   memcpy(groupAddress, addr, 6);
+  groupAddress[0] &= ~0x01; // idempotent if already masked by the sender, as it should be
   memcpy(sendAddress, groupAddress, 6);
   bpConfig.SetGroupAddress(groupAddress);
   bpConfig.Commit();
