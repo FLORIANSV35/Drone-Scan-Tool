@@ -62,7 +62,7 @@ static void ensureStorage() {
 void backpackSetPhrase(const char *phrase) {
   ensureStorage();
 
-  char buf[96];
+  char buf[112]; // "-DMY_BINDING_PHRASE=\"" + up to 64 phrase chars + "\""
   snprintf(buf, sizeof(buf), "-DMY_BINDING_PHRASE=\"%s\"", phrase);
 
   MD5Builder md5;

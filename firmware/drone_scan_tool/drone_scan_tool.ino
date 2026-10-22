@@ -64,7 +64,7 @@ bool     focusMode = false;
 uint16_t rangeMin = FMIN;   // plage de sweep (modifiable via RANGE:)
 uint16_t rangeMax = FMAX;
 
-char    cmdBuf[32];
+char    cmdBuf[80]; // "BACKPACK:PHRASE:" (16) + phrase up to 63 chars
 uint8_t cmdLen = 0;
 
 const uint16_t CHAN_FREQS[8][8] = {

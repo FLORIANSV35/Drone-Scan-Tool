@@ -10,13 +10,13 @@
 #include "elrs_eeprom.h"
 
 #define TIMER_BACKPACK_CONFIG_MAGIC   (0b11U << 30)
-#define TIMER_BACKPACK_CONFIG_VERSION 4  // bumped: added `phrase` to the struct
+#define TIMER_BACKPACK_CONFIG_VERSION 5  // bumped: `phrase` grown to match cmdBuf's 63-char limit
 
 typedef struct {
     uint32_t    version;
     uint8_t     bootCount;
     uint8_t     address[6];   // group address (UID), derived from the binding phrase
-    char        phrase[48];   // the phrase itself, kept only so it can be read back
+    char        phrase[64];   // the phrase itself, kept only so it can be read back
 } timer_backpack_config_t;
 
 class TimerBackpackConfig
