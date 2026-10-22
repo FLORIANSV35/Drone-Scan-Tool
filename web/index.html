@@ -1140,6 +1140,7 @@ function getBand(freq) {
 const FMIN = 5645, FMAX = 5945;
 
 let port = null, reader = null, writer = null;
+let readPipeDone = null, writePipeDone = null; // pipeTo() promises, must be awaited before port.close()
 let peakOn = false;
 let autoScale = false;
 
@@ -1179,12 +1180,12 @@ async function connect() {
 
     // Reader
     const dec = new TextDecoderStream();
-    port.readable.pipeTo(dec.writable);
+    readPipeDone = port.readable.pipeTo(dec.writable).catch(() => {});
     reader = dec.readable.getReader();
 
     // Writer
     const enc = new TextEncoderStream();
-    enc.readable.pipeTo(port.writable);
+    writePipeDone = enc.readable.pipeTo(port.writable).catch(() => {});
     writer = enc.writable.getWriter();
 
     setStatus('connected', 'Connecté');
@@ -1207,12 +1208,22 @@ async function connect() {
   }
 }
 
+// Ferme proprement reader/writer ET les pipeTo() qui les alimentent — sans
+// ça, port.readable/port.writable restent "locked" et port.close() peut
+// échouer ou rester bloqué silencieusement (piège classique de la Web
+// Serial API). Ne touche pas à la variable `port` elle-même : l'appelant
+// décide (disconnect() la remet à null, reconnectAtBaud() la réutilise).
+async function closeSerial(p) {
+  if (reader) { try { await reader.cancel(); } catch(_) {} reader = null; }
+  if (readPipeDone) { await readPipeDone; readPipeDone = null; }
+  if (writer) { try { await writer.close(); } catch(_) {} writer = null; }
+  if (writePipeDone) { await writePipeDone; writePipeDone = null; }
+  if (p) { try { await p.close(); } catch(_) {} }
+}
+
 async function disconnect() {
-  try {
-    if (reader) { await reader.cancel(); reader = null; }
-    if (writer) { await writer.close();  writer = null; }
-    if (port)   { await port.close();    port = null;   }
-  } catch(_) {}
+  const p = port; port = null;
+  await closeSerial(p);
   setStatus('', 'Déconnecté');
   btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
 }
@@ -3189,10 +3200,8 @@ document.getElementById('btn-bp-phrase').addEventListener('click', async () => {
 // donc on referme et rouvre le MÊME port à son nouveau débit automatiquement
 // plutôt que de laisser l'utilisateur changer le menu Baud et recliquer.
 async function reconnectAtBaud(baud) {
-  const p = port;
-  if (reader) { try { await reader.cancel(); } catch(_) {} reader = null; }
-  if (writer) { try { await writer.close(); } catch(_) {} writer = null; }
-  if (p) { try { await p.close(); } catch(_) {} }
+  const p = port; port = null;
+  await closeSerial(p);
 
   setStatus('connecting', 'Redémarrage de l\'ESP…');
   await new Promise(r => setTimeout(r, 1300)); // laisser l'ESP rebooter
@@ -3203,11 +3212,11 @@ async function reconnectAtBaud(baud) {
     document.getElementById('sel-baud').value = String(baud);
 
     const dec = new TextDecoderStream();
-    p.readable.pipeTo(dec.writable);
+    readPipeDone = p.readable.pipeTo(dec.writable).catch(() => {});
     reader = dec.readable.getReader();
 
     const enc = new TextEncoderStream();
-    enc.readable.pipeTo(p.writable);
+    writePipeDone = enc.readable.pipeTo(p.writable).catch(() => {});
     writer = enc.writable.getWriter();
 
     setStatus('connected', 'Connecté');
