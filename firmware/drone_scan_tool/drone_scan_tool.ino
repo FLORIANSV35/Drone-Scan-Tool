@@ -20,14 +20,24 @@
  *   FOCUS:XXXX        → mode focus bandes
  *   FOCUS:OFF         → scan normal
  *   DIAG              → diagnostic RSSI
+ *   BACKPACK:PHRASE:<texte> → bind phrase du mode Timer Backpack (voir plus bas)
+ *   MODE:BACKPACK     → bascule en mode RotorHazard Timer Backpack (reboot)
  *
  * Protocoles drone :
  *   DGAC France (arrêté 27/12/2019, OUI 6A:5C:35)
  *   EU Remote ID ASTM F3411-22a (OUI FA:0B:BC, subtype 0x0D)
  *   EU Remote ID ASTM F3411-19 legacy (OUI 5F:04:01)
+ *
+ * Mode RotorHazard Timer Backpack :
+ *   Ce même firmware peut aussi faire office de backpack de chronométrage
+ *   ELRS (pont série USB <-> ESP-NOW vers les backpacks VRx des pilotes),
+ *   mais jamais en même temps que le scan — voir TimerBackpack.h/.cpp.
+ *   MODE:BACKPACK bascule et redémarre dans ce mode (460800 bauds, MSP).
+ *   Pour revenir : bouton BOOT maintenu 1,5s, ou taper "MODE:SCAN" en série.
  */
 
 #include "config.h"
+#include "TimerBackpack.h"
 #include <Preferences.h>
 #include <WiFi.h>
 #include "esp_wifi.h"
@@ -37,6 +47,7 @@
 // ═══════════════════════════════════════════════
 
 Preferences prefs;
+bool g_backpackMode = false; // mode RotorHazard Timer Backpack actif (voir setup/loop)
 
 uint16_t savedScaleMin = 0;
 uint16_t savedScaleMax = 0;
@@ -616,6 +627,17 @@ void handleCommand(const char* cmd) {
     }
     focusMode=(numFreq>0); Serial.printf("ACK:FOCUS=%d\n",numFreq); return;
   }
+  if (strncmp(cmd,"BACKPACK:PHRASE:",16)==0) {
+    backpackSetPhrase(cmd+16); return;
+  }
+  if (strcmp(cmd,"MODE:BACKPACK")==0) {
+    Serial.println("ACK:MODE=BACKPACK");
+    prefs.begin("rssi-scan", false);
+    prefs.putBool("bpMode", true);
+    prefs.end();
+    delay(100);
+    ESP.restart();
+  }
 if (strcmp(cmd,"DIAG")==0) {
     const uint16_t tf[]={5658,5695,5732,5760,5800,5820,5843,5880,5905,5945};
     Serial.print("DIAG:");
@@ -672,6 +694,17 @@ if (calValid) {
 // ═══════════════════════════════════════════════
 
 void setup() {
+  // Mode persisté (voir MODE:BACKPACK / "MODE:SCAN") — lu avant toute
+  // init scanner/WiFi, car le mode Timer Backpack ne doit rien partager
+  // avec le sniffer WiFi (même radio, jamais utilisés en même temps).
+  prefs.begin("rssi-scan", true);
+  g_backpackMode = prefs.getBool("bpMode", false);
+  prefs.end();
+  if (g_backpackMode) {
+    backpackSetup();
+    return;
+  }
+
   pinMode(PIN_CLK,    OUTPUT);
   pinMode(PIN_DATA,   OUTPUT);
   pinMode(PIN_LE,     OUTPUT);
@@ -719,6 +752,8 @@ analogReadResolution(ADC_RESOLUTION);
 // ═══════════════════════════════════════════════
 
 void loop() {
+  if (g_backpackMode) { backpackLoop(); return; }
+
   checkCommand();
 
   for (uint16_t i = 0; i < numFreq; i++) {

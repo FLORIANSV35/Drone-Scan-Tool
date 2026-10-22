@@ -9,14 +9,19 @@ The ESP32-S3 does two things in parallel:
 
 A web app (Web Serial) displays the spectrum and a map of detected drones, and can flash the firmware from the browser.
 
-The same ESP32-S3 board can also be reflashed as a **RotorHazard Timer Backpack** for race timing — see [below](#rotorhazard-timer-backpack-mode). That's a separate firmware, not a mode of this sketch, so the board runs either the scanner or the timer backpack, never both at once.
+The same firmware can also switch into **RotorHazard Timer Backpack** mode for race timing — see [below](#rotorhazard-timer-backpack-mode). It's a mode switch (one serial command plus a reboot), not a reflash, but the two roles still never run at the same time: they'd both need the one Wi-Fi radio.
 
 ## Repository layout
 
 ```
 firmware/drone_scan_tool/
-  drone_scan_tool.ino   Arduino firmware (ESP32-S3)
+  drone_scan_tool.ino   Arduino firmware (ESP32-S3) — scanner/sniffer + mode switch
   config.h              Pins, scan range, sniffer settings
+  TimerBackpack.h/.cpp  RotorHazard Timer Backpack mode (ESP-NOW <-> serial MSP bridge)
+  bp_config.h/.cpp      Timer backpack settings storage (EEPROM)
+  msp.h/.cpp, msptypes.h, crc.h/.cpp, elrs_eeprom.h/.cpp
+                        Small helpers the Timer Backpack mode is built on,
+                        adapted from the ExpressLRS Backpack project (GPL-3.0)
 web/
   index.html            Web app (single file, no build step)
 ```
@@ -38,6 +43,8 @@ web/
 | GND           | GND               |
 
 GPIO 19/20 are reserved for USB CDC. ADC2 is incompatible with Wi-Fi, which is why an ADC1 pin is used.
+
+Two more pins are used only by [Timer Backpack mode](#rotorhazard-timer-backpack-mode): a status LED on GPIO 21, and the board's BOOT button on GPIO 0. Both are unused and harmless in scanning mode.
 
 ## Flashing the firmware
 
@@ -78,6 +85,8 @@ Supported commands:
 | `FOCUS:XXXX`    | Focus mode on a band                   |
 | `FOCUS:OFF`     | Back to normal scan                    |
 | `DIAG`          | RSSI diagnostic                        |
+| `BACKPACK:PHRASE:<text>` | Set the Timer Backpack binding phrase (see below) |
+| `MODE:BACKPACK` | Switch into Timer Backpack mode and reboot |
 
 ## Supported drone protocols
 
@@ -91,24 +100,38 @@ The sniffer listens on a single Wi-Fi channel at a time (channel 6 by default, c
 
 ## RotorHazard Timer Backpack mode
 
-This ESP32-S3 board can double as a **RotorHazard Timer Backpack** for race timing — but as a completely separate firmware, not a feature of this sketch. It's the official [ExpressLRS Backpack](https://github.com/ExpressLRS/Backpack) firmware, built by the ExpressLRS project itself, not code from this repository.
+This firmware can also act as a **RotorHazard Timer Backpack**: a USB-serial ⇄ ESP-NOW bridge between RotorHazard and the pilots' VRx backpacks, used for race timing. In that role it:
 
-In that role, the board:
+- Connects to the RotorHazard server over USB serial at 460800 baud, speaking the ExpressLRS [MSP backpack protocol](https://github.com/ExpressLRS/Backpack) (RotorHazard's [VRxC_ELRS plugin](https://github.com/i-am-grub/VRxC_ELRS), RotorHazard v4.1.0+).
+- Talks to pilots' VRx backpacks over ESP-NOW to show race stage, start, lap results, positions and gap times on their goggles' OSD. Currently only HDZero goggles with a built-in backpack are supported upstream.
+- Forwards the race director's `DVR Rec` switch (start/stop race) from the transmitter's backpack to RotorHazard.
 
-- Connects to the RotorHazard server over USB serial (via RotorHazard's [VRxC_ELRS plugin](https://github.com/i-am-grub/VRxC_ELRS), RotorHazard v4.1.0+, backpack firmware 1.5.0+).
-- Talks to pilots' VRx backpacks over ESP-NOW (shared bind phrase) to show race stage, start, lap results, positions and gap times on their goggles' OSD. Currently only HDZero goggles with a built-in backpack are supported.
-- Optionally lets the race director start/stop races from their transmitter's `DVR Rec` switch.
+It's **adapted from the official [ExpressLRS Backpack](https://github.com/ExpressLRS/Backpack) firmware** (`src/Timer_main.cpp` and its small device/LED/button/MSP helpers), trimmed to just this bridge — the Wi-Fi OTA update/captive-portal path and the ESP8266 targets were dropped, since this is ESP32-S3-only and already has a USB flashing workflow. That's also why this project is GPL-3.0, not MIT: see [LICENSE](LICENSE).
 
-To flash it:
+It's a **mode switch, not a reflash**, and it reuses the one Wi-Fi radio, so it never runs at the same time as the spectrum scan / drone sniffer.
 
-1. Install the [ExpressLRS Configurator](https://expresslrs.org) (desktop app).
-2. Open the Backpack tab, pick the latest release, device category **RotorHazard**, firmware **Race Timer**, target **ESP32-S3 Module (DIY)**.
-3. Set a bind phrase (shared with the pilots' VRx backpacks) and flashing method **UART**.
-4. Connect the board over USB and flash.
+### Pairing
 
-If the Configurator's UART flashing doesn't work for your board, a prebuilt binary is also available from the [Backpack releases page](https://github.com/ExpressLRS/Backpack/releases) and can be flashed with `esptool`.
+Real ExpressLRS/RotorHazard backpacks pair by sharing a **binding phrase**: both ends hash it into the same ESP-NOW group address. This firmware computes that hash the same way the ExpressLRS Configurator does, so it pairs with any officially-built backpack (e.g. HDZero goggles) given the same phrase:
 
-The RX5808 wiring is unused in this mode and can stay connected — it's harmless. To switch back to spectrum scanning / drone sniffing, just reflash the board with `firmware/drone_scan_tool/drone_scan_tool.ino` as described [above](#flashing-the-firmware).
+1. While still in scan mode, send `BACKPACK:PHRASE:<your phrase>` over serial. The device replies with the resulting group address (`ACK:PHRASE=<12 hex digits>`) — use it to double-check both ends match.
+2. Send `MODE:BACKPACK` to switch over (reboots at 460800 baud).
+
+Alternatively, pair interactively without knowing a phrase: put both devices into binding mode (a short tap of the BOOT button on this board, or the `MSP_ELRS_BACKPACK_SET_MODE 'B'` command from RotorHazard) and they'll adopt each other's address — the same fallback the official firmware uses when no phrase was pre-flashed.
+
+### Controls in this mode
+
+| Action                          | Effect                                   |
+|----------------------------------|-------------------------------------------|
+| BOOT button, short press         | Enter binding mode                        |
+| BOOT button, hold 1.5 s          | Switch back to scan mode and reboot       |
+| Send `MODE:SCAN` over serial     | Switch back to scan mode and reboot       |
+| Status LED fast blink            | Binding mode                              |
+| Status LED brief blip            | ESP-NOW activity                          |
+
+The RX5808 wiring is unused in this mode — leaving it connected is harmless.
+
+> Note: this mode uses the ESP32 Arduino core's `EEPROM` library to persist the group address, which needs a partition scheme that reserves an `eeprom` partition (the default Arduino IDE schemes for ESP32-S3 do).
 
 ## Disclaimer
 
@@ -116,4 +139,4 @@ This tool is passive: it only listens. Check your local regulations on receiving
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0-only — see [LICENSE](LICENSE). (Changed from MIT when [Timer Backpack mode](#rotorhazard-timer-backpack-mode) brought in GPL-3.0 code adapted from the ExpressLRS Backpack project.)

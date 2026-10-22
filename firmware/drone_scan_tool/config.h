@@ -22,6 +22,14 @@
 #define PIN_CLK    6
 #define PIN_RSSI   1    // ADC1_CH0
 
+// ── Broches mode RotorHazard Timer Backpack ────
+//  (inutilisées en mode scan, ignorées si le câblage RX5808 reste branché)
+//  LED status  → GPIO 21
+//  Bouton bind → GPIO 0  (bouton BOOT de la carte)
+#define PIN_BACKPACK_LED     21
+#define PIN_BACKPACK_BUTTON  0
+#define BACKPACK_BAUD_RATE   460800   // débit imposé par le protocole ExpressLRS Backpack
+
 // ── Plage de scan spectre ──────────────────────
 #define FMIN       5645
 #define FMAX       5945

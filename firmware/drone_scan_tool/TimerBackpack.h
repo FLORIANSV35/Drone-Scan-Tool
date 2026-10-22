@@ -1,0 +1,38 @@
+// RotorHazard Timer Backpack mode.
+//
+// Adapted from the ExpressLRS Backpack project (src/Timer_main.cpp and the
+// small device/LED/button helpers it uses), trimmed down to what a DIY
+// ESP32-S3 timer backpack actually needs: a serial (USB) <-> ESP-NOW MSP
+// bridge between RotorHazard and the pilots' VRx backpacks.
+// https://github.com/ExpressLRS/Backpack — GPL-3.0-only
+// Copyright (c) ExpressLRS contributors
+//
+// Dropped on purpose (not needed for this role, and not reimplemented):
+//   - the ESP8266 code paths (this sketch only targets ESP32-S3)
+//   - the Wi-Fi OTA update / captive portal (reflash over USB instead, same
+//     as the drone_scan_tool firmware)
+//   - the compile-time "binding phrase" baked into the binary by the
+//     ExpressLRS Configurator/python build scripts (no such build step
+//     here) — replaced by backpackSetPhrase(), computed at runtime with
+//     the exact same MD5 scheme, so pairing with an officially-built
+//     backpack using the same phrase still works.
+#pragma once
+
+// Called once when switching into backpack mode (after MODE:BACKPACK +
+// reboot). Takes over Serial entirely (460800 baud, MSP framing) until the
+// device is rebooted back into scan mode.
+void backpackSetup();
+
+// Called every loop() iteration while in backpack mode.
+void backpackLoop();
+
+// Derive this device's ESP-NOW group address (UID) from a human-readable
+// binding phrase and persist it, using the same
+// MD5('-DMY_BINDING_PHRASE="<phrase>"')[0:6] scheme as the official
+// ExpressLRS Configurator. Can be called from scan mode, before switching.
+void backpackSetPhrase(const char *phrase);
+
+// Puts the backpack into ESP-NOW binding mode: it will adopt the group
+// address sent by the next peer it hears from while binding. Also reachable
+// with a short press of the BOOT button (GPIO0) while in backpack mode.
+void backpackEnterBinding();
