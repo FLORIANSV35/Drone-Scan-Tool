@@ -110,6 +110,15 @@ It's **adapted from the official [ExpressLRS Backpack](https://github.com/Expres
 
 It's a **mode switch, not a reflash**, and it reuses the one Wi-Fi radio, so it never runs at the same time as the spectrum scan / drone sniffer.
 
+### Auto-detection
+
+You usually don't need to switch modes manually at all: whichever mode it's in, the firmware recognises the first few bytes sent by whatever just connected and switches on its own.
+
+- **In scan mode**, any MSP frame (what RotorHazard/ExpressLRS always sends — it starts with `$X`, a byte our own text protocol never uses) switches it straight into backpack mode.
+- **In backpack mode**, any of this firmware's own text commands (`RANGE:`, `STEP:`, `SCALE:`, `FOCUS:`, `CAL:`, `DIAG`) switches it back to scan mode — which is exactly what the web app sends the moment you hit CONNECTER, so plugging the scanner's web app into a board left in backpack mode just works.
+
+So in practice: plug the board into RotorHazard and it becomes a Timer Backpack; plug it into the scanner web app and it's a scanner again — no `MODE:` command needed either way. `MODE:BACKPACK` / `MODE:SCAN` remain there for switching with nothing yet talking on the other end.
+
 ### Pairing
 
 Real ExpressLRS/RotorHazard backpacks pair by sharing a **binding phrase**: both ends hash it into the same ESP-NOW group address. This firmware computes that hash the same way the ExpressLRS Configurator does, so it pairs with any officially-built backpack (e.g. HDZero goggles) given the same phrase:

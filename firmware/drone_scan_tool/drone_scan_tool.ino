@@ -571,9 +571,27 @@ void rebuildTable() {
   for (uint16_t i=0; i<numFreq; i++) freqTable[i] = rangeMin + (uint16_t)i * freqStep;
 }
 
+// Bascule persistée + reboot vers le mode Timer Backpack.
+void switchToBackpackMode() {
+  Serial.println("ACK:MODE=BACKPACK");
+  prefs.begin("rssi-scan", false);
+  prefs.putBool("bpMode", true);
+  prefs.end();
+  delay(100);
+  ESP.restart();
+}
+
 void checkCommand() {
   while (Serial.available()) {
     char c = (char)Serial.read();
+
+    // Auto-détection : une trame MSP (parlée par RotorHazard/ExpressLRS)
+    // commence toujours par '$','X',... — un octet que notre propre
+    // protocole texte n'utilise jamais. Si c'est le premier octet d'une
+    // commande, on considère qu'un client backpack vient de se connecter
+    // et on bascule sans attendre MODE:BACKPACK.
+    if (cmdLen == 0 && c == '$') { switchToBackpackMode(); return; }
+
     if (c=='\n'||c=='\r') {
       if (cmdLen > 0) { cmdBuf[cmdLen]='\0'; handleCommand(cmdBuf); cmdLen=0; }
     } else if (cmdLen < (sizeof(cmdBuf)-1)) { cmdBuf[cmdLen++]=c; }
@@ -630,14 +648,7 @@ void handleCommand(const char* cmd) {
   if (strncmp(cmd,"BACKPACK:PHRASE:",16)==0) {
     backpackSetPhrase(cmd+16); return;
   }
-  if (strcmp(cmd,"MODE:BACKPACK")==0) {
-    Serial.println("ACK:MODE=BACKPACK");
-    prefs.begin("rssi-scan", false);
-    prefs.putBool("bpMode", true);
-    prefs.end();
-    delay(100);
-    ESP.restart();
-  }
+  if (strcmp(cmd,"MODE:BACKPACK")==0) { switchToBackpackMode(); }
 if (strcmp(cmd,"DIAG")==0) {
     const uint16_t tf[]={5658,5695,5732,5760,5800,5820,5843,5880,5905,5945};
     Serial.print("DIAG:");

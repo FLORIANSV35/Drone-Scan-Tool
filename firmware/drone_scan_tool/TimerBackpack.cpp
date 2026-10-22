@@ -82,6 +82,16 @@ void backpackSetPhrase(const char *phrase) {
                 groupAddress[3], groupAddress[4], groupAddress[5]);
 }
 
+// Recognises a line from the drone_scan_tool scan-mode text protocol
+// (never seen from RotorHazard/ExpressLRS, which speaks binary MSP).
+static bool looksLikeScanModeCommand(const char *line) {
+  static const char *prefixes[] = { "STEP:", "SCALE:", "RANGE:", "CAL:", "FOCUS:" };
+  for (uint8_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
+    if (strncmp(line, prefixes[i], strlen(prefixes[i])) == 0) return true;
+  }
+  return strcmp(line, "DIAG") == 0;
+}
+
 // ═══════════════════════════════════════════════
 //  Mode switch back to scanning (persisted, needs a reboot)
 // ═══════════════════════════════════════════════
@@ -366,8 +376,13 @@ void backpackLoop() {
     if (c == '\n' || c == '\r') {
       if (lineLen > 0) {
         lineBuf[lineLen] = '\0';
-        if (strcmp(lineBuf, "MODE:SCAN") == 0) exitToScanMode();
-        else if (strcmp(lineBuf, "BACKPACK:BIND") == 0) {
+        if (strcmp(lineBuf, "MODE:SCAN") == 0 || looksLikeScanModeCommand(lineBuf)) {
+          // Either asked explicitly, or the scanner's web app just sent one
+          // of its own commands (e.g. the RANGE:... it sends right after
+          // connecting) — a sure sign this isn't RotorHazard on the other
+          // end, so switch back without making the user ask twice.
+          exitToScanMode();
+        } else if (strcmp(lineBuf, "BACKPACK:BIND") == 0) {
           backpackEnterBinding();
           Serial.println("ACK:BIND=WAITING");
         }
