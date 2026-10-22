@@ -125,23 +125,15 @@ const char *backpackGetPhrase() {
   return bpConfig.GetPhrase();
 }
 
-// The web app sends this exact line right after connecting, specifically
-// so this auto-detection has an unambiguous signal to match on (instead of
-// only guessing from command prefixes, which — however unlikely — a binary
-// MSP payload could in theory coincidentally contain). Keep this string
-// identical to the one in web/index.html's connect().
+// The web app sends this exact line right after connecting — a deliberate,
+// unambiguous marker, kept identical to the one in web/index.html's
+// connect(). This used to also be triggered by recognising command
+// prefixes (RANGE:/STEP:/...) as a "secondary signal", but that's exactly
+// the kind of guess that can misfire on bytes from something else entirely
+// (RotorHazard's own serial traffic, whatever it actually looks like) —
+// removed, so only this one deliberate marker (or an explicit MODE:SCAN)
+// switches back to scan mode.
 #define SCAN_APP_HELLO "SCANAPP:HELLO"
-
-// Recognises a line from the drone_scan_tool scan-mode text protocol
-// (never seen from RotorHazard/ExpressLRS, which speaks binary MSP).
-static bool looksLikeScanModeCommand(const char *line) {
-  if (strcmp(line, SCAN_APP_HELLO) == 0) return true;
-  static const char *prefixes[] = { "STEP:", "SCALE:", "RANGE:", "CAL:", "FOCUS:" };
-  for (uint8_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
-    if (strncmp(line, prefixes[i], strlen(prefixes[i])) == 0) return true;
-  }
-  return strcmp(line, "DIAG") == 0;
-}
 
 // ═══════════════════════════════════════════════
 //  Mode switch back to scanning (persisted, needs a reboot)
@@ -438,11 +430,10 @@ void backpackLoop() {
     if (c == '\n' || c == '\r') {
       if (lineLen > 0) {
         lineBuf[lineLen] = '\0';
-        if (strcmp(lineBuf, "MODE:SCAN") == 0 || looksLikeScanModeCommand(lineBuf)) {
-          // Either asked explicitly, or the scanner's web app just sent one
-          // of its own commands (e.g. the RANGE:... it sends right after
-          // connecting) — a sure sign this isn't RotorHazard on the other
-          // end, so switch back without making the user ask twice.
+        if (strcmp(lineBuf, "MODE:SCAN") == 0 || strcmp(lineBuf, SCAN_APP_HELLO) == 0) {
+          // Either asked explicitly, or the scanner's web app just sent its
+          // deliberate marker right after connecting — the only two signals
+          // trusted to switch back to scan mode on their own.
           exitToScanMode();
         } else if (strcmp(lineBuf, "BACKPACK:BIND") == 0) {
           backpackEnterBinding();
