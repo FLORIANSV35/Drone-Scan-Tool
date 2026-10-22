@@ -119,12 +119,12 @@ It's a **mode switch, not a reflash**, and it reuses the one Wi-Fi radio, so it 
 
 ### Auto-detection
 
-You usually don't need to switch modes manually at all: whichever mode it's in, the firmware recognises the first few bytes sent by whatever just connected and switches on its own.
+The firmware recognises the first few bytes sent by whatever just connected and can switch mode on its own — but this only works both ways if the other end happens to talk at the *current* mode's baud, since this board is a real UART (not native USB), and a baud mismatch garbles the bytes before any detection logic ever sees them:
 
-- **In scan mode**, any MSP frame (what RotorHazard/ExpressLRS always sends — it starts with `$X`, a byte our own text protocol never uses) switches it straight into backpack mode.
-- **In backpack mode**, the web app sends a dedicated `SCANAPP:HELLO` line the moment you hit CONNECTER, specifically so this has an unambiguous signal to match rather than guessing from command names — any of this firmware's other text commands (`RANGE:`, `STEP:`, `SCALE:`, `FOCUS:`, `CAL:`, `DIAG`) also switches it back, as a secondary check. So plugging the scanner's web app into a board left in backpack mode just works.
+- **In backpack mode (460800 baud)**, the web app sends a dedicated `SCANAPP:HELLO` line the moment you hit CONNECTER — a deliberate, unambiguous signal (any of this firmware's other text commands, like `RANGE:`, also works as a secondary check). Since the web app always connects at the baud *you* select, this reliably switches a board left in backpack mode back to scanning, and `connect()` retries the other baud automatically if the first guess doesn't answer. **This direction works plug-and-play.**
+- **In scan mode (115200 baud)**, any byte starting an MSP frame (`$`, never sent by our own text protocol) switches straight to backpack mode — but only if it actually arrives at 115200. **RotorHazard always talks at 460800** (fixed by the ExpressLRS protocol), so in practice this direction won't trigger from a real RotorHazard connection: its bytes arrive garbled at the wrong baud, same as any other 460800↔115200 mismatch on this hardware.
 
-So in practice: plug the board into RotorHazard and it becomes a Timer Backpack; plug it into the scanner web app and it's a scanner again — no `MODE:` command needed either way. `MODE:BACKPACK` / `MODE:SCAN` remain there for switching with nothing yet talking on the other end.
+In practice, that means: switch to backpack mode **once**, explicitly, from the web app (`MODE:BACKPACK`, or the Timer Backpack panel's button) before the first time you connect it to RotorHazard. The mode is persisted (survives reboots and power cycles), so from then on the board boots straight into backpack mode at 460800 whenever it's plugged into RotorHazard — no detection needed at that point, since it's already in the right mode and baud from the start. Switch back to scan mode the same explicit way (`MODE:SCAN`, or the panel button) when you want to use the scanner again — that direction auto-detects fine either way.
 
 ### Pairing
 

@@ -589,10 +589,11 @@ void checkCommand() {
 
     // Auto-détection : une trame MSP (parlée par RotorHazard/ExpressLRS)
     // commence toujours par '$','X',... — un octet que notre propre
-    // protocole texte n'utilise jamais. Si c'est le premier octet d'une
-    // commande, on considère qu'un client backpack vient de se connecter
-    // et on bascule sans attendre MODE:BACKPACK.
-    if (cmdLen == 0 && c == '$') { switchToBackpackMode(); return; }
+    // protocole texte n'utilise jamais, quelle que soit sa position. On
+    // bascule dès qu'on en voit un, sans exiger que le buffer soit vide :
+    // un octet isolé (bruit, trame précédente non terminée par \n) ne doit
+    // pas pouvoir bloquer la détection indéfiniment.
+    if (c == '$') { switchToBackpackMode(); return; }
 
     if (c=='\n'||c=='\r') {
       if (cmdLen > 0) { cmdBuf[cmdLen]='\0'; handleCommand(cmdBuf); cmdLen=0; }
