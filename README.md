@@ -124,7 +124,7 @@ The firmware recognises the first few bytes sent by whatever just connected and 
 - **In backpack mode (460800 baud)**, the web app sends a dedicated `SCANAPP:HELLO` line the moment you hit CONNECTER — a deliberate, unambiguous signal (any of this firmware's other text commands, like `RANGE:`, also works as a secondary check). Since the web app always connects at the baud *you* select, this reliably switches a board left in backpack mode back to scanning, and `connect()` retries the other baud automatically if the first guess doesn't answer. **This direction works plug-and-play.**
 - **In scan mode (115200 baud)**, any byte starting an MSP frame (`$`, never sent by our own text protocol) switches straight to backpack mode — but only if it actually arrives at 115200. **RotorHazard always talks at 460800** (fixed by the ExpressLRS protocol), so in practice this direction won't trigger from a real RotorHazard connection: its bytes arrive garbled at the wrong baud, same as any other 460800↔115200 mismatch on this hardware.
 
-In practice, that means: switch to backpack mode **once**, explicitly, from the web app (`MODE:BACKPACK`, or the Timer Backpack panel's button) before the first time you connect it to RotorHazard. The mode is persisted (survives reboots and power cycles), so from then on the board boots straight into backpack mode at 460800 whenever it's plugged into RotorHazard — no detection needed at that point, since it's already in the right mode and baud from the start. Switch back to scan mode the same explicit way (`MODE:SCAN`, or the panel button) when you want to use the scanner again — that direction auto-detects fine either way.
+In practice, that means: switch to backpack mode explicitly, from the web app (`MODE:BACKPACK`, or the Timer Backpack panel's button), each time before connecting it to RotorHazard. The mode is remembered in RTC memory, not flash: it survives the reboot that `MODE:BACKPACK`/`MODE:SCAN` themselves trigger, but **not a real power cycle** — unplugging the board always brings it back up in scan mode, by design, so you always know what you'll get without having to check. (This also keeps mode-switching off the same small flash-backed NVS storage the bind phrase uses, which doesn't take well to being written often — see the note below.)
 
 ### Pairing
 
@@ -150,7 +150,7 @@ If the board's BOOT button (GPIO 0) happens to be reachable, a short press does 
 
 The RX5808 wiring is unused in this mode — leaving it connected is harmless.
 
-> Note: this mode uses the ESP32 Arduino core's `EEPROM` library to persist the group address, which needs a partition scheme that reserves an `eeprom` partition (the default Arduino IDE schemes for ESP32-S3 do).
+> Note: the bind phrase and group address are the only things still persisted to flash in this mode (via the ESP32 Arduino core's `EEPROM` library, which stores them in an NVS namespace — no separate `eeprom` partition needed). That NVS partition is small (20 KB) and seems to corrupt if written to very often across many mode switches, going silent on both bauds until the flash is fully erased and reflashed (`Erase All Flash Before Sketch Upload: Enabled`, once). If serial output ever goes completely silent after a lot of back-and-forth testing, that's the fix.
 
 ## Disclaimer
 
