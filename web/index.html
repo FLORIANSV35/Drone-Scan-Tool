@@ -1048,9 +1048,10 @@
       <button id="btn-bp-phrase">1 · Définir la phrase (BACKPACK:PHRASE:…)</button>
       <button id="btn-bp-switch">2 · Basculer en mode Backpack (reboot)</button>
       <div id="backpack-note">
-        Après bascule, l'ESP redémarre à <strong>460800 bauds</strong> — la
-        reconnexion à ce débit se fait automatiquement, inutile de toucher
-        au menu Baud.
+        Après bascule, cette page se <strong>déconnecte</strong> (ne se
+        reconnecte pas) pour laisser le port libre — c'est RotorHazard qui
+        doit s'y connecter, un port série ne peut être ouvert que par un
+        seul programme à la fois.
       </div>
 
       <button id="btn-bp-bind">Entrer en mode binding (sans phrase)</button>
@@ -3318,7 +3319,14 @@ async function reconnectAtBaud(baud) {
 document.getElementById('btn-bp-switch').addEventListener('click', async () => {
   if (await bpSend('MODE:BACKPACK')) {
     document.getElementById('backpack-overlay').style.display = 'none';
-    reconnectAtBaud(460800);
+    // Ne PAS se reconnecter : en mode backpack, c'est RotorHazard qui doit
+    // avoir le port pour lui — un port série ne peut être ouvert que par un
+    // seul programme à la fois. Si cette page le garde ouvert, RotorHazard
+    // le voit dans sa liste mais ne peut jamais vraiment lui parler.
+    const p = port; port = null;
+    await closeSerial(p);
+    setStatus('', 'Déconnecté — ESP en mode Backpack, prêt pour RotorHazard');
+    btnCon.textContent = '◉ CONNECTER'; btnCon.classList.remove('disc');
   }
 });
 
