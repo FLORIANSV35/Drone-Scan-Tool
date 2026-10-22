@@ -3231,8 +3231,19 @@ async function bpSend(cmd) {
   catch(e) { setStatus('error', 'Envoi: ' + e.message); return false; }
 }
 
+// Mémorise la bind phrase dans ce navigateur (confort perso, jamais
+// envoyé nulle part d'autre) pour ne pas avoir à la retaper à chaque fois.
+const bpPhraseInput = document.getElementById('backpack-phrase-input');
+try {
+  const savedPhrase = localStorage.getItem('bpPhrase');
+  if (savedPhrase) bpPhraseInput.value = savedPhrase;
+} catch(_) {}
+bpPhraseInput.addEventListener('input', () => {
+  try { localStorage.setItem('bpPhrase', bpPhraseInput.value); } catch(_) {}
+});
+
 document.getElementById('btn-bp-phrase').addEventListener('click', async () => {
-  const phrase = document.getElementById('backpack-phrase-input').value.trim();
+  const phrase = bpPhraseInput.value.trim();
   if (!phrase) { setStatus('error', 'Entrez une bind phrase'); return; }
   await bpSend('BACKPACK:PHRASE:' + phrase);
 });
