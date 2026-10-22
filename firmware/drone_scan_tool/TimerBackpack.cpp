@@ -82,9 +82,17 @@ void backpackSetPhrase(const char *phrase) {
                 groupAddress[3], groupAddress[4], groupAddress[5]);
 }
 
+// The web app sends this exact line right after connecting, specifically
+// so this auto-detection has an unambiguous signal to match on (instead of
+// only guessing from command prefixes, which — however unlikely — a binary
+// MSP payload could in theory coincidentally contain). Keep this string
+// identical to the one in web/index.html's connect().
+#define SCAN_APP_HELLO "SCANAPP:HELLO"
+
 // Recognises a line from the drone_scan_tool scan-mode text protocol
 // (never seen from RotorHazard/ExpressLRS, which speaks binary MSP).
 static bool looksLikeScanModeCommand(const char *line) {
+  if (strcmp(line, SCAN_APP_HELLO) == 0) return true;
   static const char *prefixes[] = { "STEP:", "SCALE:", "RANGE:", "CAL:", "FOCUS:" };
   for (uint8_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
     if (strncmp(line, prefixes[i], strlen(prefixes[i])) == 0) return true;

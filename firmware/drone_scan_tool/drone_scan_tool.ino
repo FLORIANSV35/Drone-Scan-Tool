@@ -22,6 +22,7 @@
  *   DIAG              → diagnostic RSSI
  *   BACKPACK:PHRASE:<texte> → bind phrase du mode Timer Backpack (voir plus bas)
  *   MODE:BACKPACK     → bascule en mode RotorHazard Timer Backpack (reboot)
+ *   SCANAPP:HELLO     → envoyé par l'appli web à la connexion (auto-détection)
  *
  * Protocoles drone :
  *   DGAC France (arrêté 27/12/2019, OUI 6A:5C:35)
@@ -649,6 +650,10 @@ void handleCommand(const char* cmd) {
     backpackSetPhrase(cmd+16); return;
   }
   if (strcmp(cmd,"MODE:BACKPACK")==0) { switchToBackpackMode(); }
+  // Marqueur envoyé par l'appli web juste après connexion — sert surtout à
+  // l'auto-détection du mode backpack (voir TimerBackpack.cpp), ici on se
+  // contente de confirmer qu'on est bien en mode scan.
+  if (strcmp(cmd,"SCANAPP:HELLO")==0) { Serial.println("ACK:HELLO=SCAN"); return; }
 if (strcmp(cmd,"DIAG")==0) {
     const uint16_t tf[]={5658,5695,5732,5760,5800,5820,5843,5880,5905,5945};
     Serial.print("DIAG:");

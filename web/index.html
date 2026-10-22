@@ -1189,6 +1189,11 @@ async function connect() {
     setStatus('connected', 'Connecté');
     btnCon.textContent = '◉ DÉCONNECTER'; btnCon.classList.add('disc');
 
+    // Marqueur dédié, sans ambiguïté possible : sert à l'ESP à détecter
+    // qu'une connexion scan (et non un backpack RotorHazard) vient d'arriver,
+    // même s'il était resté en mode Timer Backpack (voir TimerBackpack.cpp).
+    writer.write('SCANAPP:HELLO\n').catch(() => {});
+
     const activeStep = document.querySelector('.btn-step.active');
     if (activeStep && parseInt(activeStep.dataset.step) > 0) sendStep(parseInt(activeStep.dataset.step));
     writer.write(`RANGE:${sliderFMin},${sliderFMax}\n`).catch(() => {});
