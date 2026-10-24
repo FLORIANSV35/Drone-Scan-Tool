@@ -5,6 +5,11 @@
 // Only the opcodes actually used by the Timer Backpack bridge are kept.
 #pragma once
 
+// Generic (Betaflight-style) MSP opcode, not ELRS-specific — the radio's TX
+// backpack sends this over ESP-NOW on a VTx channel change, to relay to the
+// timer over serial.
+#define MSP_SET_VTX_CONFIG                      89
+
 // ELRS specific opcodes
 #define MSP_ELRS_BIND                           0x09
 #define MSP_ELRS_GET_BACKPACK_VERSION           0x10

@@ -312,10 +312,13 @@ static void ProcessMSPPacketFromPeer(mspPacket_t *packet) {
     return;
   }
 
-  // Only the DVR-REC triggered "recording state" (race start/stop) is
-  // forwarded on to RotorHazard; everything else from peers is ignored.
-  if (packet->function == MSP_ELRS_BACKPACK_SET_RECORDING_STATE) {
-    msp.sendPacket(packet, &Serial);
+  // Only these two, relayed straight to RotorHazard over serial; everything
+  // else from peers is ignored.
+  switch (packet->function) {
+    case MSP_ELRS_BACKPACK_SET_RECORDING_STATE: // DVR-REC switch: race start/stop
+    case MSP_SET_VTX_CONFIG:                    // VTx channel change from the radio
+      msp.sendPacket(packet, &Serial);
+      break;
   }
 }
 

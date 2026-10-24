@@ -111,7 +111,7 @@ This firmware can also act as a **RotorHazard Timer Backpack**: a USB-serial ⇄
 
 - Connects to the RotorHazard server over USB serial at 460800 baud, speaking the ExpressLRS [MSP backpack protocol](https://github.com/ExpressLRS/Backpack) (RotorHazard's [VRxC_ELRS plugin](https://github.com/i-am-grub/VRxC_ELRS), RotorHazard v4.1.0+).
 - Talks to pilots' VRx backpacks over ESP-NOW to show race stage, start, lap results, positions and gap times on their goggles' OSD. Currently only HDZero goggles with a built-in backpack are supported upstream.
-- Forwards the race director's `DVR Rec` switch (start/stop race) from the transmitter's backpack to RotorHazard.
+- Forwards the race director's `DVR Rec` switch (start/stop race) and VTx channel changes (`MSP_SET_VTX_CONFIG`, sent when the radio changes the pilot's video channel) from the transmitter's backpack to RotorHazard.
 
 It's **adapted from the official [ExpressLRS Backpack](https://github.com/ExpressLRS/Backpack) firmware** (`src/Timer_main.cpp` and its small device/LED/button/MSP helpers), trimmed to just this bridge — the Wi-Fi OTA update/captive-portal path and the ESP8266 targets were dropped, since this is ESP32-S3-only and already has a USB flashing workflow. That's also why this project is GPL-3.0, not MIT: see [LICENSE](LICENSE).
 
