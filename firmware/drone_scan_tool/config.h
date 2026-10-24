@@ -32,7 +32,10 @@
 
 // Bind phrase utilisée si aucune n'a encore été définie via
 // BACKPACK:PHRASE: (ou après un effacement complet de la flash).
-// Change-la ici si tu veux une autre valeur par défaut.
+// Mets ta vraie phrase via BACKPACK:PHRASE: (ou le panneau web) plutôt
+// qu'ici : elle reste alors uniquement sur l'ESP (EEPROM), jamais dans ce
+// fichier ni sur GitHub. Ne mets pas ta vraie bind phrase dans ce define,
+// ce fichier est public.
 #define DEFAULT_BIND_PHRASE  "CHANGE-ME"
 
 // ── Plage de scan spectre ──────────────────────
