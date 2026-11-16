@@ -16,6 +16,13 @@
 #include "elrs_eeprom.h"
 #include "bp_config.h"
 
+// Drone-beacon sniffer pieces, defined in drone_scan_tool.ino (same sketch,
+// so they're already plain global symbols — no shared header needed, just
+// these forward declarations) and reused here for coexistUpdate() below.
+extern "C" void IRAM_ATTR wifi_sniffer_cb(void *buf, wifi_promiscuous_pkt_type_t type);
+void processQueue();
+void cleanBalises();
+
 // ═══════════════════════════════════════════════
 //  State
 // ═══════════════════════════════════════════════
@@ -209,6 +216,8 @@ static void buttonUpdate(uint32_t now) {
 // so OnDataRecv's memcmp(mac_addr, groupAddress, ...) compares against the
 // exact same value this device's radio actually uses, matching what a peer
 // (radio backpack, goggles) that derives the same masked address would send.
+#define ESPNOW_CHANNEL 1 // see the comment on SetSoftMACAddress() below
+
 static void SetSoftMACAddress() {
   WiFi.mode(WIFI_STA);
   // Pin a known channel explicitly: this chip is the only thing in the
@@ -217,10 +226,56 @@ static void SetSoftMACAddress() {
   // NOW only delivers between peers on the *same* channel, so leaving this
   // to whatever the radio happened to default to is asking for a silent
   // mismatch with a peer that assumes the usual channel 1.
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
   esp_wifi_set_mac(WIFI_IF_STA, groupAddress);
   esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
+}
+
+// ═══════════════════════════════════════════════
+//  Coexistence with the drone-beacon sniffer
+// ═══════════════════════════════════════════════
+//
+// There's one 2.4 GHz radio, and ESP-NOW and the sniffer each need a
+// different channel (the sniffer's WIFI_SNIFFER_CHANNEL vs. ESPNOW_CHANNEL
+// above) — so "running both at once" really means time-sharing the radio:
+// mostly on the ESP-NOW channel (so DVR-Rec/VTx-config forwarding stays
+// responsive), with short, regular hops over to the sniffer channel to
+// catch beacons. ESP-NOW traffic arriving during a sniff window is missed,
+// same as it would be if the peer's own send just failed — acceptable here,
+// since nothing timing-critical (lap data) rides on this link, only race
+// control and VTx-channel relay.
+//
+// Detected beacons still get printed as JSON on Serial, same as scan mode
+// — which in backpack mode is also RotorHazard's MSP link. Untested against
+// a real RotorHazard: the assumption is that its MSP parser, like ours,
+// just waits for the next '$' and treats anything else as noise between
+// frames, so interleaved JSON lines get skipped rather than desyncing it.
+static void coexistUpdate(uint32_t now) {
+  static bool     onSnifferChannel = false;
+  static uint32_t windowStart      = 0;
+  const uint32_t  ESPNOW_DWELL_MS  = 1800; // mostly here, for ESP-NOW responsiveness
+  const uint32_t  SNIFF_DWELL_MS   = 220;  // brief hop to listen for beacons
+
+  if (!onSnifferChannel && now - windowStart >= ESPNOW_DWELL_MS) {
+    onSnifferChannel = true;
+    windowStart = now;
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_channel(WIFI_SNIFFER_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    wifi_promiscuous_filter_t flt;
+    flt.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
+    esp_wifi_set_promiscuous_filter(&flt);
+    esp_wifi_set_promiscuous_rx_cb(wifi_sniffer_cb);
+    esp_wifi_set_promiscuous(true);
+  } else if (onSnifferChannel && now - windowStart >= SNIFF_DWELL_MS) {
+    onSnifferChannel = false;
+    windowStart = now;
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  }
+
+  processQueue();
+  cleanBalises();
 }
 
 static void registerPeer(const uint8_t *address) {
@@ -363,6 +418,11 @@ static void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_le
 // ═══════════════════════════════════════════════
 
 void backpackEnterBinding() {
+  // Force back onto the ESP-NOW channel: coexistUpdate() may have left the
+  // radio on the sniffer's channel at the exact moment binding was
+  // requested, and it's skipped for the whole duration of binding.
+  esp_wifi_set_promiscuous(false);
+  esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   connectionState = bp_binding;
   bindingStart = millis();
   isBinding = true;
@@ -410,6 +470,10 @@ void backpackLoop() {
     isBinding = false;
     Serial.println("ACK:BIND=TIMEOUT");
   }
+
+  // Skip the sniffer time-share while binding: that's a short, deliberate
+  // window where catching the peer's bind packet matters more than beacons.
+  if (connectionState != bp_binding) coexistUpdate(now);
 
   // Read Serial: feed the MSP parser, and in parallel watch for plain text
   // command lines (a human/our web app typing them, as opposed to the

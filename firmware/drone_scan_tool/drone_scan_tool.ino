@@ -32,8 +32,11 @@
  *
  * Mode RotorHazard Timer Backpack :
  *   Ce même firmware peut aussi faire office de backpack de chronométrage
- *   ELRS (pont série USB <-> ESP-NOW vers les backpacks VRx des pilotes),
- *   mais jamais en même temps que le scan — voir TimerBackpack.h/.cpp.
+ *   ELRS (pont série USB <-> ESP-NOW vers les backpacks VRx des pilotes).
+ *   Le sniffer de balises drone tourne aussi dans ce mode, partagé dans le
+ *   temps avec l'ESP-NOW sur l'unique radio 2.4GHz (voir coexistUpdate()
+ *   dans TimerBackpack.cpp) — seul le sweep RX5808 s'arrête, faute de canal
+ *   série pour en afficher le résultat pendant que RotorHazard l'occupe.
  *   MODE:BACKPACK bascule et redémarre dans ce mode (460800 bauds, MSP) ;
  *   une fois basculé, ça reste en mode backpack même après débranchage,
  *   jusqu'à bascule explicite (voir TimerBackpack.h pour pourquoi).

@@ -3,7 +3,11 @@
 // Adapted from the ExpressLRS Backpack project (src/Timer_main.cpp and the
 // small device/LED/button helpers it uses), trimmed down to what a DIY
 // ESP32-S3 timer backpack actually needs: a serial (USB) <-> ESP-NOW MSP
-// bridge between RotorHazard and the pilots' VRx backpacks.
+// bridge between RotorHazard and the pilots' VRx backpacks. Also runs the
+// drone-beacon sniffer (drone_scan_tool.ino) time-shared on the same radio
+// — see coexistUpdate() in TimerBackpack.cpp — so backpack duty and drone
+// detection aren't mutually exclusive anymore, just not both at full duty
+// cycle at once.
 // https://github.com/ExpressLRS/Backpack — GPL-3.0-only
 // Copyright (c) ExpressLRS contributors
 //

@@ -9,7 +9,7 @@ The ESP32-S3 does two things in parallel:
 
 A web app (Web Serial) displays the spectrum and a map of detected drones, and can flash the firmware from the browser.
 
-The same firmware can also switch into **RotorHazard Timer Backpack** mode for race timing — see [below](#rotorhazard-timer-backpack-mode). It's a mode switch (one serial command plus a reboot), not a reflash, but the two roles still never run at the same time: they'd both need the one Wi-Fi radio.
+The same firmware can also switch into **RotorHazard Timer Backpack** mode for race timing — see [below](#rotorhazard-timer-backpack-mode). It's a mode switch (one serial command plus a reboot), not a reflash. The RX5808 sweep is scan-mode-only, but the drone sniffer now runs in backpack mode too, time-shared with ESP-NOW on the one Wi-Fi radio.
 
 ## Repository layout
 
@@ -115,7 +115,7 @@ This firmware can also act as a **RotorHazard Timer Backpack**: a USB-serial ⇄
 
 It's **adapted from the official [ExpressLRS Backpack](https://github.com/ExpressLRS/Backpack) firmware** (`src/Timer_main.cpp` and its small device/LED/button/MSP helpers), trimmed to just this bridge — the Wi-Fi OTA update/captive-portal path and the ESP8266 targets were dropped, since this is ESP32-S3-only and already has a USB flashing workflow. That's also why this project is GPL-3.0, not MIT: see [LICENSE](LICENSE).
 
-It's a **mode switch, not a reflash**, and it reuses the one Wi-Fi radio, so it never runs at the same time as the spectrum scan / drone sniffer.
+It's a **mode switch, not a reflash**. The RX5808 spectrum sweep stops in this mode — nowhere to show its output while Serial is the MSP link to RotorHazard — but the drone-beacon sniffer keeps running, time-shared with ESP-NOW on the one 2.4 GHz radio: mostly on the ESP-NOW channel (so DVR-Rec/VTx-config forwarding stays responsive), with brief regular hops over to the sniffer's channel to catch beacons. ESP-NOW traffic arriving during a hop is simply missed, same as a dropped packet — fine for race control and VTx relay, since no lap timing rides on that link. Not yet verified against a live RotorHazard connection (same open question as the detected-beacon JSON interleaved on the MSP serial line below).
 
 Verified compatible with a genuine ExpressLRS Timer Backpack (same phrase, side by side) on a few details that aren't obvious from the official source and silently don't work otherwise: the version reply must be the ASCII string `"1.5.5"`, not raw bytes; the ESP-NOW group address must have its first byte's LSB cleared *everywhere* it's used (not just for the device's own MAC), or peer filtering silently drops real traffic; and the Wi-Fi channel must be pinned (1) explicitly, since this board — unlike every other device in this ecosystem — also runs Wi-Fi in a different role (the drone sniffer) and can't rely on whatever channel the radio happens to default to.
 
