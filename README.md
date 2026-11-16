@@ -54,6 +54,7 @@ Two more pins are used only by [Timer Backpack mode](#rotorhazard-timer-backpack
    - **USB CDC On Boot: Disabled** (the default — this board's USB port is wired through a UART bridge chip, not native USB; enabling CDC-on-boot silently redirects `Serial` to the unused native-USB peripheral and nothing comes out)
    - **PSRAM: OPI PSRAM** (this board has 8 MB of embedded octal PSRAM; leaving PSRAM disabled or set to QSPI silently crashes very early in boot, before anything is printed)
    - **Flash Size: 16MB**
+   - **Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS)** — the default dual-OTA scheme only leaves ~1.3MB per app slot, which the BLE stack alone eats a third of; this sketch never uses OTA (always reflashed over USB), so there's nothing lost by giving up that second slot for the extra room.
 4. Upload. **The first time**, or after flashing anything else to this board, also tick **Erase All Flash Before Sketch Upload: Enabled** once — a leftover NVS partition from a different flash layout can crash boot (again silently, before any serial output) the same way a PSRAM mismatch does. Once it's booted cleanly once, you can leave erase disabled for later uploads.
 
 These settings match the **diymore ESP32-S3 DevKitC-1 N16R8** this project was built against; a different ESP32-S3 board may need different Flash Size/PSRAM values — check its exact chip variant (N*R* suffix) if serial output stays silent after flashing.
@@ -65,6 +66,14 @@ Settings (pins, frequency range, sniffer Wi-Fi channel, delays) are in `config.h
 Open `web/index.html` in a Chromium-based browser (Chrome, Edge), since Web Serial is not available in Firefox or Safari. Connect the ESP32-S3, pick the baud rate (115200 by default) and connect.
 
 The app loads Leaflet, CryptoJS and esptool-js from CDNs, so it needs an Internet connection.
+
+### Bluetooth (scan mode only)
+
+In scan mode, the ESP32-S3 also runs a BLE "UART" service (Nordic UART Service UUIDs — `BleUart.h`/`.cpp`), mirroring the exact same text protocol as the serial connection. This exists mainly for Android, which has no Web Serial (only WebUSB, which this board's UART bridge chip can't speak) — Bluetooth is the only realistic wireless path there, in particular for [the Android APK](#android-app). Desktop browsers can keep using Web Serial over USB as before.
+
+Not disabled in backpack mode, it's just not started there: Serial in that mode is the MSP link to RotorHazard and nothing else should be mixed into it.
+
+> The browser side (Web Bluetooth) has no way to request a specific PHY (1M/2M/Coded-long-range) — that's negotiated below the JavaScript API, by the OS's own Bluetooth stack. So this gives you a wireless connection; it doesn't guarantee extended range, which depends on hardware/OS on the other end. Untested on real hardware so far (no board connected while this was written) — needs an actual BLE central (Chrome on a computer or phone) connecting and checking both short (`ACK:`) and long (`{"id":...}` drone JSON) lines arrive intact, and that typed commands (`RANGE:`, etc.) reach the firmware the same as over serial.
 
 ## Serial protocol
 

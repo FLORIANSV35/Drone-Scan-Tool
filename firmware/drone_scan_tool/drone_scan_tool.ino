@@ -46,9 +46,16 @@
 
 #include "config.h"
 #include "TimerBackpack.h"
+#include "BleUart.h"
 #include <Preferences.h>
 #include <WiFi.h>
 #include "esp_wifi.h"
+
+// Partout dans CE fichier (scan mode uniquement — TimerBackpack.cpp garde
+// le vrai Serial pour RotorHazard/MSP, voir BleUart.h), Serial.xxx devient
+// IO.xxx : même protocole texte, mais aussi diffusé en BLE pour l'APK
+// Android, qui n'a pas Web Serial. Doit venir après tous les #include.
+#define Serial IO
 
 // ═══════════════════════════════════════════════
 //  SCANNER — variables globales
@@ -737,7 +744,8 @@ void setup() {
   pinMode(PIN_RSSI,   INPUT);
 analogReadResolution(ADC_RESOLUTION);
 
-  Serial.begin(BAUD_RATE);
+  Serial.begin(BAUD_RATE); // -> IO.begin(), demarre le vrai Serial (voir macro plus haut)
+  bleUartBegin("DroneScanTool"); // pour l'APK Android, qui n'a pas Web Serial
   delay(500); // attendre USB CDC
 
   prefsLoad();
